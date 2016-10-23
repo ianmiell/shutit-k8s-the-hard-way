@@ -1,0 +1,3 @@
+[submodule "shutit-library"]
+	path = shutit-library
+	url = https://github.com/ianmiell/shutit-library
