@@ -26,44 +26,44 @@ Vagrant.configure("2") do |config|
 
   config.vm.define "controller0" do |controller0|    
     controller0.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    controller0.vm.hostname = "controller0.local"
+    controller0.vm.hostname = "controller0"
     controller0.vm.network "private_network", ip: "192.168.2.2"
   end
 
   config.vm.define "controller1" do |controller1|
     controller1.vm.box = ''' + '"' + vagrant_image + '"' + '''
     controller1.vm.network :private_network, ip: "192.168.2.3"
-    controller1.vm.hostname = "controller1.local"
+    controller1.vm.hostname = "controller1"
   end
 
   config.vm.define "controller2" do |controller2|
     controller2.vm.box = ''' + '"' + vagrant_image + '"' + '''
     controller2.vm.network :private_network, ip: "192.168.2.4"
-    controller2.vm.hostname = "controller2.local"
+    controller2.vm.hostname = "controller2"
   end
 
   config.vm.define "worker0" do |worker0|    
     worker0.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    worker0.vm.hostname = "worker0.local"
     worker0.vm.network "private_network", ip: "192.168.2.5"
+    worker0.vm.hostname = "worker0"
   end
 
   config.vm.define "worker1" do |worker1|
     worker1.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    worker1.vm.network :private_network, ip: "192.168.2.6
-    worker1.vm.hostname = "worker1.local"
+    worker1.vm.network :private_network, ip: "192.168.2.6"
+    worker1.vm.hostname = "worker1"
   end
 
   config.vm.define "worker2" do |worker2|
     worker2.vm.box = ''' + '"' + vagrant_image + '"' + '''
     worker2.vm.network :private_network, ip: "192.168.2.7"
-    worker2.vm.hostname = "worker2.local"
+    worker2.vm.hostname = "worker2"
   end
 
   config.vm.define "load_balancer" do |load_balancer|
     load_balancer.vm.box = ''' + '"' + vagrant_image + '"' + '''
     load_balancer.vm.network :private_network, ip: "192.168.2.8"
-    load_balancer.vm.hostname = "load-balancer.local"
+    load_balancer.vm.hostname = "load-balancer"
   end
 end''')
 		shutit.send('cd ~/' + module_name)
@@ -192,13 +192,56 @@ EOF''')
 		shutit.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes')
 		shutit.send('openssl x509 -in kubernetes.pem -text -noout')
 		for ip in ('192.168.2.2','192.168.2.3','192.168.2.4','192.168.2.5','192.168.2.6','192.168.2.7'):
-			shutit.send('scp kubernetes.pem vagrant@' + ip + ':~/',expect='continue')
-			shutit.send('yes',expect='assword')
-			shutit.send('vagrant')
-		shutit.pause_point('scp')
+			for f in ('kubernetes.pem','ca.pem','kubernetes-key.pem'):
+				shutit.multisend('scp ' + f + ' vagrant@' + ip + ':~/',{'continue':'yes','assword':'vagrant'})
+		shutit.logout()
+		shutit.logout()
 
-		shutit.logout()
-		shutit.logout()
+		# etcd HA cluster
+		for machine in ('controller0','controller1','controller2'):
+			shutit.login(command='vagrant ssh ' + machine)
+			shutit.login(command='sudo su -',password='vagrant')
+			shutit.send('mkdir -p /etc/etcd/')
+			shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /etc/etcd/')
+			shutit.send('curl -L https://github.com/coreos/etcd/releases/download/v3.0.10/etcd-v3.0.10-linux-amd64.tar.gz | tar -zxvf -')
+			shutit.send('mv etcd-v3.0.10-linux-amd64/etcd* /usr/bin/')
+			shutit.send(' mkdir -p /var/lib/etcd')
+			shutit.send('''cat > etcd.service <<"EOF"
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+ExecStart=/usr/bin/etcd --name ETCD_NAME \
+  --cert-file=/etc/etcd/kubernetes.pem \
+  --key-file=/etc/etcd/kubernetes-key.pem \
+  --peer-cert-file=/etc/etcd/kubernetes.pem \
+  --peer-key-file=/etc/etcd/kubernetes-key.pem \
+  --trusted-ca-file=/etc/etcd/ca.pem \
+  --peer-trusted-ca-file=/etc/etcd/ca.pem \
+  --initial-advertise-peer-urls https://INTERNAL_IP:2380 \
+  --listen-peer-urls https://INTERNAL_IP:2380 \
+  --listen-client-urls https://INTERNAL_IP:2379,http://127.0.0.1:2379 \
+  --advertise-client-urls https://INTERNAL_IP:2379 \
+  --initial-cluster-token etcd-cluster-0 \
+  --initial-cluster controller0=https://10.240.0.10:2380,controller1=https://10.240.0.11:2380,controller2=https://10.240.0.12:2380 \
+  --initial-cluster-state new \
+  --data-dir=/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF''')
+			shutit.send('''export INTERNAL_IP=$(ifconfig eth1 | grep inet.addr | awk '{print $2}' | awk -F: '{print $2}')''')
+			shutit.send('''ETCD_NAME=controller$(echo $INTERNAL_IP | cut -c 11)''')
+			shutit.send('''sed -i s/INTERNAL_IP/${INTERNAL_IP}/g etcd.service''')
+			shutit.send('''sed -i s/ETCD_NAME/${ETCD_NAME}/g etcd.service''')
+			shutit.pause_point('systemctl install?')
+			shutit.send('''mv etcd.service /etc/systemd/system/''')
+			shutit.logout()
+			shutit.logout()
+		shutit.pause_point('')
 		return True
 
 	def get_config(self, shutit):
