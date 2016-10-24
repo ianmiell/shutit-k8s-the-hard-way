@@ -84,18 +84,19 @@ end''')
 		shutit.send('cd ~/' + module_name)
 		shutit.send('vagrant up --provider virtualbox',timeout=99999)
 		# Set up the load balancer - tcp 6443 as per https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-infrastructure-aws.md
-		for machine in ('controller0','controller1','controller2','worker0','worker1','worker2','load_balancer','client'):
-			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-			shutit.login(command='sudo su -',prompt_prefix=machine,password='vagrant')
-			shutit.send('apt-get update')
-			shutit.install('xterm') # for resize
-			shutit.logout()
-			shutit.logout()
 
-		shutit.login(command='vagrant ssh load_balancer',prompt_prefix='load_balancer')
-		shutit.login(command='sudo su -',prompt_prefix='load_balancer',password='vagrant')
-		shutit.install('haproxy')
-		shutit.send_file('''/etc/haproxy.cfg''','''global
+		# debug - takes some time
+		#for machine in ('controller0','controller1','controller2','worker0','worker1','worker2','load_balancer','client'):
+		#	shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		#	shutit.login(command='sudo su -',prompt_prefix=machine,password='vagrant')
+		#	shutit.install('xterm') # for resize
+		#	shutit.logout()
+		#	shutit.logout()
+		# Log in and set up the load balancer
+		shutit.login(command='vagrant ssh load_balancer',prompt_prefix='load_balancer',note='Log into the load balancer machine')
+		shutit.login(command='sudo su -',prompt_prefix='load_balancer',password='vagrant',note='Elevate to root')
+		shutit.install('haproxy',note='Install haproxy. We use haproxy to be the interface for external requests to the kubernetes cluster.')
+		shutit.send_file('''/etc/haproxy/haproxy.cfg''','''global
     log /dev/log    local0
     log /dev/log    local1 notice
     chroot /var/lib/haproxy
@@ -128,22 +129,24 @@ frontend k8snodes
 backend nodes
     mode tcp
     balance roundrobin
-    server controller0 192.168.2.2:6443 check
-    server controller0 192.168.2.3:6443 check
-    server controller0 192.168.2.4:6443 check''')
+    server controller0 ''' + controller0ip + ''':6443 check
+    server controller1 ''' + controller1ip + ''':6443 check
+    server controller2 ''' + controller2ip + ''':6443 check''',note='Create the haproxy config file, and point requests to 6443 to the three controller ips')
 		shutit.send('mkdir -p /run/haproxy')
-		shutit.send('haproxy -f /etc/haproxy.cfg')
+		shutit.send('systemctl daemon-reload',note='Reload the haproxy config.')
+		shutit.send('systemctl enable haproxy',note='Enable the haproxy service.')
+		shutit.send('systemctl start haproxy',note='Start the haproxy service.')
+		shutit.send('systemctl status haproxy --no-pager',note='Check all is ok with the service.')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-certificate-authority.md
 		shutit.send('cd')
-		shutit.send('mkdir -p certs')
-		shutit.send('cd certs')
-		shutit.send('wget https://pkg.cfssl.org/R1.2/cfssl_linux-amd64')
-		shutit.send('wget https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64')
-		shutit.send('chmod +x cfssl_linux-amd64')
-		shutit.send('chmod +x cfssljson_linux-amd64')
-		shutit.send('sudo mv cfssl_linux-amd64 /usr/local/bin/cfssl')
-		shutit.send('sudo mv cfssljson_linux-amd64 /usr/local/bin/cfssljson')
+		shutit.send('mkdir -p certs && cd certs',note='Create a certs folder')
+		shutit.send('wget https://pkg.cfssl.org/R1.2/cfssl_linux-amd64',note='Get the cfssl binaries')
+		shutit.send('wget https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64',note='Get the cfssl binaries')
+		shutit.send('chmod +x cfssl_linux-amd64',note='Make the binaries executable')
+		shutit.send('chmod +x cfssljson_linux-amd64',note='Make the binaries executable')
+		shutit.send('mv cfssl_linux-amd64 /usr/local/bin/cfssl',note='Move the binaries to a path folder')
+		shutit.send('mv cfssljson_linux-amd64 /usr/local/bin/cfssljson',note='Move the binaries to a path folder')
 		shutit.send('''echo '{
   "signing": {
     "default": {
@@ -156,7 +159,7 @@ backend nodes
       }
     }
   }
-}' > ca-config.json''')
+}' > ca-config.json''',note='Create the certificate authority creation config file')
 		shutit.send('''echo '{
   "CN": "Kubernetes",
   "key": {
@@ -172,10 +175,9 @@ backend nodes
       "ST": "Oregon"
     }
   ]
-}' > ca-csr.json''')
-		shutit.send('cfssl gencert -initca ca-csr.json | cfssljson -bare ca')
-		shutit.send('openssl x509 -in ca.pem -text -noout')
-		shutit.send('''export KUBERNETES_PUBLIC_ADDRESS=''' + load_balancer_ip)
+}' > ca-csr.json''',note='Create the certificate authority signing request file with details of the certificate')
+		shutit.send('cfssl gencert -initca ca-csr.json | cfssljson -bare ca',note='Generate the certificate authority certificate')
+		shutit.send('openssl x509 -in ca.pem -text -noout',note='Check all is ok with the cert')
 		shutit.send('''cat > kubernetes-csr.json <<EOF
 {
   "CN": "kubernetes",
@@ -193,7 +195,6 @@ backend nodes
     "ip-192-168-2-6",
     "ip-192-168-2-7",
     "ip-192-168-2-8",
-    "ip-192-168-2-9",
     "10.32.0.1",
     "''' + controller0ip + '''",
     "''' + controller1ip + '''",
@@ -201,7 +202,7 @@ backend nodes
     "''' + worker0ip + '''",
     "''' + worker1ip + '''",
     "''' + worker2ip + '''",
-    "${KUBERNETES_PUBLIC_ADDRESS}",
+    "''' + load_balancer_ip + '''",
     "127.0.0.1"
   ],
   "key": {
@@ -218,10 +219,11 @@ backend nodes
     }
   ]
 }
-EOF''')
-		shutit.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes')
-		shutit.send('openssl x509 -in kubernetes.pem -text -noout')
-		for ip in (controller0ip,controller1ip,controller2ip,worker0ip,worker1ip,worker2ip,client_ip):
+EOF''',note='Create the details of the kubernetes certificate')
+		shutit.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes',note='Create the kubernetes certificate')
+		shutit.send('openssl x509 -in kubernetes.pem -text -noout',note='Check all is ok with the kubernetes certificate')
+		shutit.send('ls *pem',note='Copying the key files to the various servers')
+		for ip in (controller0ip, controller1ip, controller2ip, worker0ip, worker1ip, worker2ip, client_ip):
 			for f in ('kubernetes.pem','ca.pem','kubernetes-key.pem'):
 				shutit.multisend('scp ' + f + ' vagrant@' + ip + ':~/',{'continue':'yes','assword':'vagrant'})
 		shutit.logout()
@@ -229,13 +231,13 @@ EOF''')
 
 		# etcd HA cluster - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/03-etcd.md
 		for machine in ('controller0','controller1','controller2'):
-			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
-			shutit.send('mkdir -p /etc/etcd/')
-			shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /etc/etcd/')
-			shutit.send('curl -L https://github.com/coreos/etcd/releases/download/v3.0.10/etcd-v3.0.10-linux-amd64.tar.gz | tar -zxvf -')
-			shutit.send('mv etcd-v3.0.10-linux-amd64/etcd* /usr/bin/')
-			shutit.send(' mkdir -p /var/lib/etcd')
+			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto machine: ' + machine)
+			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
+			shutit.send('mkdir -p /etc/etcd/',note='Ensure the etcd config folder exists')
+			shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /etc/etcd/',note='Copy the certificates to the etcd config folder')
+			shutit.send('curl -L https://github.com/coreos/etcd/releases/download/v3.0.10/etcd-v3.0.10-linux-amd64.tar.gz | tar -zxvf -',note='Get the etcd binaries')
+			shutit.send('mv etcd-v3.0.10-linux-amd64/etcd* /usr/bin/',note='Move the etcd binaries to the path')
+			shutit.send(' mkdir -p /var/lib/etcd',note='Create the etcd folder in var')
 			shutit.send('''cat > etcd.service <<"EOF"
 [Unit]
 Description=etcd
@@ -262,42 +264,41 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF''')
-			shutit.send('''export INTERNAL_IP=$(ifconfig eth1 | grep inet.addr | awk '{print $2}' | awk -F: '{print $2}')''')
-			shutit.send('''export ETCD_NAME=''' + machine)
+EOF''',note='Create the etcd service file.')
+			shutit.send('''export INTERNAL_IP=$(ifconfig eth1 | grep inet.addr | awk '{print $2}' | awk -F: '{print $2}')''',note='Get the external ip for this machine')
 			shutit.send('''sed -i s/INTERNAL_IP/${INTERNAL_IP}/g etcd.service''')
-			shutit.send('''sed -i s/ETCD_NAME/${ETCD_NAME}/g etcd.service''')
-			shutit.send('''mv etcd.service /etc/systemd/system/''')
-			shutit.send('systemctl daemon-reload')
-			shutit.send('systemctl enable etcd')
-			shutit.send('systemctl start etcd')
-			shutit.send('systemctl status etcd --no-pager')
+			shutit.send('''sed -i s/ETCD_NAME/''' + machine + '''/g etcd.service''')
+			shutit.send('''mv etcd.service /etc/systemd/system/''',note='Put the service file in the right place')
+			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
+			shutit.send('systemctl enable etcd',note='Enable the etcd service.')
+			shutit.send('systemctl start etcd',note='Start the etcd service.')
+			shutit.send('systemctl status etcd --no-pager',note='Check all is ok with the service.')
 			shutit.logout()
 			shutit.logout()
 		for machine in ('controller0','controller1','controller2'):
-			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
-			shutit.send_and_require('etcdctl --ca-file=/etc/etcd/ca.pem cluster-health','healthy')
+			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into the machine: ' + machine)
+			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
+			shutit.send_and_require('etcdctl --ca-file=/etc/etcd/ca.pem cluster-health','healthy',note='Check the cluster looks healthy from machine: ' + machine)
 			shutit.logout()
 			shutit.logout()
 		# kubernetes controller - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-kubernetes-controller.md
 		for machine in ('controller0','controller1','controller2'):
-			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
-			shutit.send('mkdir -p /var/lib/kubernetes')
-			shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /var/lib/kubernetes/')
-			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-apiserver')
-			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-controller-manager')
-			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-scheduler')
-			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl')
-			shutit.send('chmod +x kube-apiserver kube-controller-manager kube-scheduler kubectl')
-			shutit.send('mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/bin/')
-			shutit.send('wget https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/token.csv')
+			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into the machine: ' + machine)
+			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
+			shutit.send('mkdir -p /var/lib/kubernetes',note='Ensure the kubernetes folder exists in var')
+			shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /var/lib/kubernetes/',note='Copy the certificates to the kubernetes folder')
+			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-apiserver',note='Get the binaries')
+			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-controller-manager',note='Get the binaries')
+			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-scheduler',note='Get the binaries')
+			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl',note='Get the binaries')
+			shutit.send('chmod +x kube-apiserver kube-controller-manager kube-scheduler kubectl',note='Chown the binaries')
+			shutit.send('mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/bin/',note='Move the binaries to the path')
+			shutit.send('wget https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/token.csv',note='Get the token file')
 			
 			# TODO: replace default token 'changeme' aka kubetoken in token.csv
-			shutit.send('mv token.csv /var/lib/kubernetes/')
-			shutit.send('wget https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/authorization-policy.jsonl')
-			shutit.send('mv authorization-policy.jsonl /var/lib/kubernetes/')
+			shutit.send('mv token.csv /var/lib/kubernetes/',note='Move the token file')
+			shutit.send('wget https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/authorization-policy.jsonl',note='Get the authorization policy')
+			shutit.send('mv authorization-policy.jsonl /var/lib/kubernetes/',note='Move the authorization policy to the kubernetes folder')
 			shutit.send('''cat > kube-apiserver.service <<"EOF"
 [Unit]
 Description=Kubernetes API Server
@@ -329,15 +330,15 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF''')
-			shutit.send('''export INTERNAL_IP=$(ifconfig eth1 | grep inet.addr | awk '{print $2}' | awk -F: '{print $2}')''')
-			shutit.send('''sed -i s/INTERNAL_IP/$INTERNAL_IP/g kube-apiserver.service''')
-			shutit.send('''mv kube-apiserver.service /etc/systemd/system/''')
-			shutit.send('''systemctl daemon-reload''')
-			shutit.send('''systemctl enable kube-apiserver''')
-			shutit.send('''systemctl start kube-apiserver''')
-			shutit.send('''systemctl status kube-apiserver --no-pager''')
-
+EOF''',note='Create the kubernetes apiserver service. Note that the service ip cluster range is 10.23.0.0/16 - this is the network that will be used for services.')
+			shutit.send('''export INTERNAL_IP=$(ifconfig eth1 | grep inet.addr | awk '{print $2}' | awk -F: '{print $2}')''',note='Get the external ip of this host')
+			shutit.send('''sed -i s/INTERNAL_IP/$INTERNAL_IP/g kube-apiserver.service''',note='Overwrite the internal ip in the "advertise-address" section of the service file')
+			shutit.send('mv kube-apiserver.service /etc/systemd/system/',note='Install the service file')
+			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
+			shutit.send('systemctl enable kube-apiserver',note='Enable the kube-apiserver service')
+			shutit.send('systemctl start kube-apiserver',note='Start the kube-apiserver service')
+			shutit.send('systemctl status kube-apiserver --no-pager',note='Check the kube-apiserver service is up ok')
+			# kube controller manager service
 			shutit.send('''cat > kube-controller-manager.service <<"EOF"
 [Unit]
 Description=Kubernetes Controller Manager
@@ -359,13 +360,14 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF''')
-			shutit.send('sed -i s/INTERNAL_IP/$INTERNAL_IP/g kube-controller-manager.service')
-			shutit.send('mv kube-controller-manager.service /etc/systemd/system/')
-			shutit.send('systemctl daemon-reload')
-			shutit.send('systemctl enable kube-controller-manager')
-			shutit.send('systemctl start kube-controller-manager')
-			shutit.send('systemctl status kube-controller-manager --no-pager')
+EOF''',note='Create the kube-controller-manager service file')
+			shutit.send('sed -i s/INTERNAL_IP/$INTERNAL_IP/g kube-controller-manager.service',note='Replace INTERNAL_IP in the master section with the IP of this host.')
+			shutit.send('mv kube-controller-manager.service /etc/systemd/system/',note='Move the service file into systemd')
+			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
+			shutit.send('systemctl enable kube-controller-manager',note='Enable the kube-controller-manager service')
+			shutit.send('systemctl start kube-controller-manager',note='Start the kube-controller-manager service')
+			shutit.send('systemctl status kube-controller-manager --no-pager',note='Check the kube-controller-manager is ok')
+			# kube scheduler service
 			shutit.send('''cat > kube-scheduler.service <<"EOF"
 [Unit]
 Description=Kubernetes Scheduler
@@ -384,16 +386,16 @@ WantedBy=multi-user.target
 EOF''')
 			shutit.send('sed -i s/INTERNAL_IP/$INTERNAL_IP/g kube-scheduler.service')
 			shutit.send('mv kube-scheduler.service /etc/systemd/system/')
-			shutit.send('systemctl daemon-reload')
-			shutit.send('systemctl enable kube-scheduler')
-			shutit.send('systemctl start kube-scheduler')
-			shutit.send('systemctl status kube-scheduler --no-pager')
+			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
+			shutit.send('systemctl enable kube-scheduler',note='Enable the kube-scheduler')
+			shutit.send('systemctl start kube-scheduler',note='Start the kube-scheduler')
+			shutit.send('systemctl status kube-scheduler --no-pager',note='Check the kube-scheduler service is ok')
 			shutit.logout()
 			shutit.logout()
 		for machine in ('controller0','controller1','controller2'):
 			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
 			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
-			shutit.send_and_require('kubectl get componentstatuses','Healthy')
+			shutit.send_and_require('kubectl get componentstatuses','Healthy',note='Checking the status of the kube cluster from machine: ' + machine)
 			shutit.logout()
 			shutit.logout()
 
@@ -421,7 +423,7 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target" > /etc/systemd/system/docker.service'""")
-			shutit.send('systemctl daemon-reload')
+			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
 			shutit.send('systemctl enable docker')
 			shutit.send('systemctl start docker')
 			shutit.send('docker version')
@@ -480,7 +482,7 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target" > /etc/systemd/system/kubelet.service'""")
-			shutit.send('systemctl daemon-reload')
+			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
 			shutit.send('systemctl enable kubelet')
 			shutit.send('systemctl start kubelet')
 			shutit.send('systemctl status kubelet --no-pager')
@@ -501,12 +503,21 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""")
-			shutit.send('systemctl daemon-reload')
+			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
 			shutit.send('systemctl enable kube-proxy')
 			shutit.send('systemctl start kube-proxy')
 			shutit.send('systemctl status kube-proxy --no-pager')
 			shutit.logout()
 			shutit.logout()
+
+		# restart haproxy (not sure why, possibly health checks fails it up to here)
+		machine = 'load_balancer'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.send('systemctl restart haproxy')
+		shutit.logout()
+		shutit.logout()
+
 
 		# kubectl client - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/06-kubectl.md
 		machine = 'client'
@@ -525,11 +536,22 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""")
 		# network routes - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/07-network.md
 		# TODO: there's a problem here (altho everything else seems to work):
 		# ip route add here? https://github.com/kubernetes/kubernetes/issues/27161
-		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address} {.spec.podCIDR} {"\n"}{end}'""")
+		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address} {.spec.podCIDR} {.spec.externalID} {"\n"}{end}'""")
 		# TODO: Vagrant's 10.0.2.15 gets in the way here?
-		#10.0.2.15 10.200.0.0/24 
-		#10.0.2.15 10.200.1.0/24 
-		#10.0.2.15 10.200.2.0/24 
+#10.0.2.15 10.200.0.0/24 worker0 
+#10.0.2.15 10.200.1.0/24 worker1 
+#10.0.2.15 10.200.2.0/24 worker2 
+
+# TODO: is the route the same each time?
+#On worker0:
+#ip route add 10.200.1.0/24 via 192.168.2.6
+#ip route add 10.200.2.0/24 via 192.168.2.7
+#On worker1:
+#ip route add 10.200.0.0/24 via 192.168.2.5
+#ip route add 10.200.2.0/24 via 192.168.2.7
+#On worker2:
+#ip route add 10.200.0.0/24 via 192.168.2.5
+#ip route add 10.200.1.0/24 via 192.168.2.6
 
 		# cluster dns add-on - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/08-dns-addon.md
 		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/services/kubedns.yaml')
@@ -539,7 +561,11 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""")
 
 		# smoke test - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-smoke-test.md
 		shutit.send('kubectl run nginx --image=nginx --port=80 --replicas=3')
-		shutit.send_until('kubectl get pods -o wide','Running.*worker2')
+		#shutit.send_until('kubectl get pods -o wide','Running')
+		shutit.send('kubectl expose deployment nginx --type NodePort')
+		shutit.send('kubectl get svc')
+		port = shutit.send_and_get_output("""kubectl get svc nginx --output=jsonpath='{range .spec.ports[0]}{.nodePort}'""")
+		
 		shutit.pause_point('')
 		shutit.logout()
 		shutit.logout()
