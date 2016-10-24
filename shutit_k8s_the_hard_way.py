@@ -88,7 +88,7 @@ end''')
 			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
 			shutit.login(command='sudo su -',prompt_prefix=machine,password='vagrant')
 			shutit.send('apt-get update')
-			shutit.send('apt install xterm') # for resize
+			shutit.install('xterm') # for resize
 			shutit.logout()
 			shutit.logout()
 
