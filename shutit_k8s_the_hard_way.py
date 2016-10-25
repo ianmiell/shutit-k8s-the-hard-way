@@ -82,16 +82,16 @@ Vagrant.configure("2") do |config|
   end
 end''')
 		shutit.send('cd ~/' + module_name)
-		shutit.send('vagrant up --provider virtualbox',timeout=99999)
+		shutit.send('vagrant up --provider virtualbox',timeout=99999, note='Bring the vagrant cluster up')
 		# Set up the load balancer - tcp 6443 as per https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-infrastructure-aws.md
 
 		# debug - takes some time
 		#for machine in ('controller0','controller1','controller2','worker0','worker1','worker2','load_balancer','client'):
-		#	shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		#	shutit.login(command='sudo su -',prompt_prefix=machine,password='vagrant')
+		#	shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into machine: ' + machine)
+		#	shutit.login(command='sudo su -',prompt_prefix=machine,password='vagrant',note='Elevate privileges to root')
 		#	shutit.install('xterm') # for resize
-		#	shutit.logout()
-		#	shutit.logout()
+		#	shutit.logout(note='Log out of root')
+		#	shutit.logout(note='Log out of machine: ' + machine)
 		# Log in and set up the load balancer
 		shutit.login(command='vagrant ssh load_balancer',prompt_prefix='load_balancer',note='Log into the load balancer machine')
 		shutit.login(command='sudo su -',prompt_prefix='load_balancer',password='vagrant',note='Elevate to root')
@@ -386,20 +386,20 @@ EOF''')
 			shutit.logout()
 			shutit.logout()
 		for machine in ('controller0','controller1','controller2'):
-			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto machine: ' + machine)
+			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges on machine: ' + machine)
 			shutit.send_and_require('kubectl get componentstatuses','Healthy',note='Checking the status of the kube cluster from machine: ' + machine)
 			shutit.logout()
 			shutit.logout()
 
 		# Kubernetes workers - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-worker.md
 		for machine in ('worker0','worker1','worker2'):
-			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
-			shutit.send('mkdir -p /var/lib/kubernetes')
-			shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /var/lib/kubernetes/')
-			shutit.send('curl -L https://get.docker.com/builds/Linux/x86_64/docker-1.12.1.tgz | tar -zxvf -')
-			shutit.send('cp docker/docker* /usr/bin/')
+			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto machine: ' + machine)
+			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges on machine: ' + machine)
+			shutit.send('mkdir -p /var/lib/kubernetes',note='Create the kubernetes folder')
+			shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /var/lib/kubernetes/',note='Put the certificates into the kubernetes folder')
+			shutit.send('curl -L https://get.docker.com/builds/Linux/x86_64/docker-1.12.1.tgz | tar -zxvf -',note='Get the docker binary')
+			shutit.send('cp docker/docker* /usr/bin/',note='Copy the docker binaries into the path')
 			shutit.send("""sudo sh -c 'echo "[Unit]
 Description=Docker Application Container Engine
 Documentation=http://docs.docker.io
@@ -415,19 +415,21 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target" > /etc/systemd/system/docker.service'""")
+WantedBy=multi-user.target" > /etc/systemd/system/docker.service'""",note='Set up the docker service. We are managing docker networking with the cni plugin (coming up), so switch off iptables (iptables=false) and ip masquerading (ip-masq=false).')
 			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
-			shutit.send('systemctl enable docker')
-			shutit.send('systemctl start docker')
-			shutit.send('docker version')
-			shutit.send('mkdir -p /opt/cni')
-			shutit.send('curl -L https://storage.googleapis.com/kubernetes-release/network-plugins/cni-07a8a28637e97b22eb8dfe710eeae1344f69d16e.tar.gz | tar -zxvf - -C /opt/cni')
-			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl')
-			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-proxy')
-			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubelet')
-			shutit.send('chmod +x kubectl kube-proxy kubelet')
-			shutit.send('mv kubectl kube-proxy kubelet /usr/bin/')
-			shutit.send('mkdir -p /var/lib/kubelet/')
+			shutit.send('systemctl enable docker',note='Enable the docker service')
+			shutit.send('systemctl start docker',note='Start the docker service')
+			shutit.send('docker version',note='Check the docker version')
+			shutit.send('mkdir -p /opt/cni',note='Create a folder for the cni plugin')
+			shutit.send('curl -L https://storage.googleapis.com/kubernetes-release/network-plugins/cni-07a8a28637e97b22eb8dfe710eeae1344f69d16e.tar.gz | tar -zxvf - -C /opt/cni',note='Download and untar the cni plugin')
+			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl',note='Get the kubectl binary')
+			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-proxy',note='Get the kube proxy binary')
+			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubelet',note='Get the kubelet binary')
+			shutit.send('chmod +x kubectl kube-proxy kubelet',note='Make the binaries executable')
+			shutit.send('mv kubectl kube-proxy kubelet /usr/bin/',note='Move the binaries to the path')
+
+			# Setting up the kubelet.
+			shutit.send('mkdir -p /var/lib/kubelet/',note='Create the kubelet /var/lib folder')
 			# NOTE: changeme token is in as raw below in original
 			shutit.send("""sudo sh -c 'echo "apiVersion: v1
 kind: Config
@@ -474,11 +476,13 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target" > /etc/systemd/system/kubelet.service'""")
+WantedBy=multi-user.target" > /etc/systemd/system/kubelet.service'""",note='Create the kubelet service file.')
 			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
-			shutit.send('systemctl enable kubelet')
-			shutit.send('systemctl start kubelet')
-			shutit.send('systemctl status kubelet --no-pager')
+			shutit.send('systemctl enable kubelet',note='Enable the kubelet service')
+			shutit.send('systemctl start kubelet',note='Start the kubelet service')
+			shutit.send('systemctl status kubelet --no-pager',note='Check that the kubelet service is up')
+
+			# Setting up the kube-proxy
 			# Should controller0ip be load balancer ip?
 			shutit.send("""sudo sh -c 'echo "[Unit]
 Description=Kubernetes Kube Proxy
@@ -495,21 +499,21 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""")
+WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='Create the kube-proxy service file.')
 			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
-			shutit.send('systemctl enable kube-proxy')
-			shutit.send('systemctl start kube-proxy')
-			shutit.send('systemctl status kube-proxy --no-pager')
-			shutit.logout()
-			shutit.logout()
+			shutit.send('systemctl enable kube-proxy',note='Enable the kube-proxy service')
+			shutit.send('systemctl start kube-proxy',note='Start the kube-proxy service')
+			shutit.send('systemctl status kube-proxy --no-pager',note='Check that the kube-proxy service is up')
+			shutit.logout(note='Log out of root')
+			shutit.logout(note='Log out of machine: ' + machine)
 
 		# restart haproxy (not sure why, possibly health checks fails it up to here)
 		machine = 'load_balancer'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log back onto the load balancer to restart haproxy (possibly due to health checks failing')
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
 		shutit.send('systemctl restart haproxy')
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
 
 		# kubectl client - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/06-kubectl.md
