@@ -85,17 +85,10 @@ end''')
 		shutit.send('vagrant up --provider virtualbox',timeout=99999, note='Bring the vagrant cluster up')
 		# Set up the load balancer - tcp 6443 as per https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-infrastructure-aws.md
 
-		# debug - takes some time
-		#for machine in ('controller0','controller1','controller2','worker0','worker1','worker2','load_balancer','client'):
-		#	shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into machine: ' + machine)
-		#	shutit.login(command='sudo su -',prompt_prefix=machine,password='vagrant',note='Elevate privileges to root')
-		#	shutit.install('xterm') # for resize
-		#	shutit.logout(note='Log out of root')
-		#	shutit.logout(note='Log out of machine: ' + machine)
 		# Log in and set up the load balancer
 		shutit.login(command='vagrant ssh load_balancer',prompt_prefix='load_balancer',note='Log into the load balancer machine')
 		shutit.login(command='sudo su -',prompt_prefix='load_balancer',password='vagrant',note='Elevate to root')
-		shutit.install('haproxy',note='Install haproxy. We use haproxy to be the interface for external requests to the kubernetes cluster.')
+		shutit.install('xterm haproxy',note='Install haproxy. We use haproxy to be the interface for external requests to the kubernetes cluster.')
 		shutit.send_file('''/etc/haproxy/haproxy.cfg''','''global
     log /dev/log    local0
     log /dev/log    local1 notice
@@ -520,6 +513,7 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		machine = 'client'
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.install('xterm') # for resize
 		shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl')
 		shutit.send('chmod +x kubectl')
 		shutit.send('mv kubectl /usr/local/bin')
@@ -530,13 +524,12 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		shutit.send('kubectl config use-context default-context')
 		shutit.send_and_require('kubectl get componentstatuses','etcd-2.*Healthy')
 		shutit.send_and_require('kubectl get nodes','worker2.*Ready')
+
 		# network routes - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/07-network.md
-		# TODO: there's a problem here (altho everything else seems to work):
-		# ip route add here? https://github.com/kubernetes/kubernetes/issues/27161
-		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address} {.spec.podCIDR} {.spec.externalID} {"\n"}{end}'""")
-		worker0cidr = shutit.send(r"""kubectl get nodes --output=jsonpath='{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker0 | awk '{print $1}'""")
-		worker1cidr = shutit.send(r"""kubectl get nodes --output=jsonpath='{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker1 | awk '{print $1}'""")
-		worker2cidr = shutit.send(r"""kubectl get nodes --output=jsonpath='{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker2 | awk '{print $1}'""")
+		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]} {.spec.podCIDR} {.spec.externalID} {"\n"}{end}'""")
+		worker0cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker0 | awk '{print $1}'""")
+		worker1cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker1 | awk '{print $1}'""")
+		worker2cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker2 | awk '{print $1}'""")
 		# Log out of client
 		shutit.logout()
 		shutit.logout()
@@ -545,8 +538,8 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		# doing layer3 networking, so ...
 		# Do worker0
 		worker_machine = 'worker0'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=worker_machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
 		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
 		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
 		shutit.logout()
@@ -554,8 +547,8 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 
 		# Do worker1
 		worker_machine = 'worker1'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + worker_machine,prompt_prefix=worker_machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
 		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
 		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
 		shutit.logout()
@@ -563,8 +556,8 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 
 		# Do worker2
 		worker_machine = 'worker2'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + worker_machine,prompt_prefix=worker_machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
 		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
 		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
 		shutit.logout()
@@ -580,15 +573,59 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		shutit.send_and_require('kubectl --namespace=kube-system get pods','Running')
 
 		# smoke test - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-smoke-test.md
-		shutit.send('kubectl run nginx --image=nginx --port=80 --replicas=3')
+		shutit.send('kubectl run nginx --image=nginx --port=80 --replicas=2')
 		#shutit.send_until('kubectl get pods -o wide','Running')
 		shutit.send('kubectl expose deployment nginx --type NodePort')
 		shutit.send('kubectl get svc')
 		port = shutit.send_and_get_output("""kubectl get svc nginx --output=jsonpath='{range .spec.ports[0]}{.nodePort}'""")
 		
+		shutit.logout()
+		shutit.logout()
+
+		# Update haproxy to forward from the lb
+		# Log back onto the client
+		machine = 'load_balancer'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.send('''cat >> /etc/haproxy/haproxy.cfg << EOF
+
+frontend nginxk8snodes
+    bind *:''' + port + '''
+    mode tcp
+    default_backend nginxnodes
+
+backend nginxnodes
+    mode tcp
+    balance roundrobin
+    server worker0 ''' + worker0ip + ''':''' + port + ''' check
+    server worker1 ''' + worker1ip + ''':''' + port + ''' check
+    server worker2 ''' + worker2ip + ''':''' + port + ''' check
+EOF''')
+		shutit.send('systemctl restart haproxy')
+		shutit.send('systemctl status haproxy')
+		shutit.logout()
+		shutit.logout()
+
+
+		# Description of iptables on a worker node
+		machine = 'worker0'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto the worker0 node')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate priviliges to root')
+		shutit.send('iptables --list -t nat',note='List the iptables rules set up by kubernetes to route requests to the service layer to the underlying pods.')
+		shutit.logout()
+		shutit.logout()
+
+		# Leave the user on the client
+		machine = 'client'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
 		shutit.pause_point('')
 		shutit.logout()
 		shutit.logout()
+
+
+
+
 
 		# cleanup - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/10-cleanup.md
 		# Not needed - just run ./destroy_vms.sh
