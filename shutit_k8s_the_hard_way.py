@@ -82,14 +82,17 @@ Vagrant.configure("2") do |config|
   end
 end''')
 		shutit.send('cd ~/' + module_name)
-		shutit.send('vagrant up --provider virtualbox',timeout=99999, note='Bring the vagrant cluster up')
-		# Set up the load balancer - tcp 6443 as per https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-infrastructure-aws.md
+		shutit.send('vagrant up --provider virtualbox',timeout=99999)
 
-		# Log in and set up the load balancer
+
+		################################################################################
+		# Set up the load balancer - tcp 6443 as per https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-infrastructure-aws.md
+		################################################################################
 		shutit.login(command='vagrant ssh load_balancer',prompt_prefix='load_balancer',note='Log into the load balancer machine')
 		shutit.login(command='sudo su -',prompt_prefix='load_balancer',password='vagrant',note='Elevate to root')
-		shutit.install('xterm haproxy',note='Install haproxy. We use haproxy to be the interface for external requests to the kubernetes cluster.')
-		shutit.send_file('''/etc/haproxy/haproxy.cfg''','''global
+		shutit.install('xterm haproxy',note='Install xterm and haproxy. We use haproxy to be the interface for external requests to the kubernetes cluster.')
+		shutit.send('''cat > /etc/haproxy/haproxy.cfg << EOF
+global
     log /dev/log    local0
     log /dev/log    local1 notice
     chroot /var/lib/haproxy
@@ -117,14 +120,18 @@ backend nodes
     balance roundrobin
     server controller0 ''' + controller0ip + ''':6443 check
     server controller1 ''' + controller1ip + ''':6443 check
-    server controller2 ''' + controller2ip + ''':6443 check''',note='Create the haproxy config file, and point requests to 6443 to the three controller ips')
+    server controller2 ''' + controller2ip + ''':6443 check
+EOF''',note='Create the haproxy config file, and point requests to 6443 to the three controller ips')
 		shutit.send('mkdir -p /run/haproxy')
 		shutit.send('systemctl daemon-reload',note='Reload the haproxy config.')
 		shutit.send('systemctl enable haproxy',note='Enable the haproxy service.')
 		shutit.send('systemctl start haproxy',note='Start the haproxy service.')
 		shutit.send('systemctl status haproxy --no-pager',note='Check all is ok with the service.')
 
-		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-certificate-authority.md
+
+		################################################################################
+		# Set up self-signed CA: https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-certificate-authority.md
+		################################################################################
 		shutit.send('cd')
 		shutit.send('mkdir -p certs && cd certs',note='Create a certs folder')
 		shutit.send('wget https://pkg.cfssl.org/R1.2/cfssl_linux-amd64',note='Get the cfssl binaries')
@@ -212,10 +219,13 @@ EOF''',note='Create the details of the kubernetes certificate')
 		for ip in (controller0ip, controller1ip, controller2ip, worker0ip, worker1ip, worker2ip, client_ip):
 			for f in ('kubernetes.pem','ca.pem','kubernetes-key.pem'):
 				shutit.multisend('scp ' + f + ' vagrant@' + ip + ':~/',{'continue':'yes','assword':'vagrant'})
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
+
+		################################################################################
 		# etcd HA cluster - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/03-etcd.md
+		################################################################################
 		for machine in ('controller0','controller1','controller2'):
 			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto machine: ' + machine)
 			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
@@ -259,15 +269,19 @@ EOF''',note='Create the etcd service file.')
 			shutit.send('systemctl enable etcd',note='Enable the etcd service.')
 			shutit.send('systemctl start etcd',note='Start the etcd service.')
 			shutit.send('systemctl status etcd --no-pager',note='Check all is ok with the service.')
-			shutit.logout()
-			shutit.logout()
-		for machine in ('controller0','controller1','controller2'):
-			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into the machine: ' + machine)
-			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
-			shutit.send_and_require('etcdctl --ca-file=/etc/etcd/ca.pem cluster-health','healthy',note='Check the cluster looks healthy from machine: ' + machine)
-			shutit.logout()
-			shutit.logout()
+			shutit.logout(note='Log out of root')
+			shutit.logout(note='Log out of machine: ' + machine)
+		machine = 'controller0'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into the machine: ' + machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
+		shutit.send_and_require('etcdctl --ca-file=/etc/etcd/ca.pem cluster-health','healthy',note='Check the cluster looks healthy from machine: ' + machine)
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
+
+
+		################################################################################
 		# kubernetes controller - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-kubernetes-controller.md
+		################################################################################
 		for machine in ('controller0','controller1','controller2'):
 			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into the machine: ' + machine)
 			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
@@ -376,16 +390,19 @@ EOF''')
 			shutit.send('systemctl enable kube-scheduler',note='Enable the kube-scheduler')
 			shutit.send('systemctl start kube-scheduler',note='Start the kube-scheduler')
 			shutit.send('systemctl status kube-scheduler --no-pager',note='Check the kube-scheduler service is ok')
-			shutit.logout()
-			shutit.logout()
+			shutit.logout(note='Log out of root')
+			shutit.logout(note='Log out of machine: ' + machine)
 		for machine in ('controller0','controller1','controller2'):
 			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto machine: ' + machine)
 			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges on machine: ' + machine)
 			shutit.send_and_require('kubectl get componentstatuses','Healthy',note='Checking the status of the kube cluster from machine: ' + machine)
-			shutit.logout()
-			shutit.logout()
+			shutit.logout(note='Log out of root')
+			shutit.logout(note='Log out of machine: ' + machine)
 
+
+		################################################################################
 		# Kubernetes workers - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-worker.md
+		################################################################################
 		for machine in ('worker0','worker1','worker2'):
 			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto machine: ' + machine)
 			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges on machine: ' + machine)
@@ -505,11 +522,13 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log back onto the load balancer to restart haproxy (possibly due to health checks failing')
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
 		shutit.send('systemctl restart haproxy')
-		shutit.logout(note='Log out of root')
+		shutit.logout()
 		shutit.logout(note='Log out of machine: ' + machine)
 
 
+		################################################################################
 		# kubectl client - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/06-kubectl.md
+		################################################################################
 		machine = 'client'
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
@@ -525,14 +544,17 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		shutit.send_and_require('kubectl get componentstatuses','etcd-2.*Healthy')
 		shutit.send_and_require('kubectl get nodes','worker2.*Ready')
 
+
+		################################################################################
 		# network routes - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/07-network.md
+		################################################################################
 		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]} {.spec.podCIDR} {.spec.externalID} {"\n"}{end}'""")
 		worker0cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker0 | awk '{print $1}'""")
 		worker1cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker1 | awk '{print $1}'""")
 		worker2cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker2 | awk '{print $1}'""")
 		# Log out of client
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
 		# Log onto each of the workers and add the route to each node. We are
 		# doing layer3 networking, so ...
@@ -542,8 +564,8 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
 		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
 		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
 		# Do worker1
 		worker_machine = 'worker1'
@@ -551,8 +573,8 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
 		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
 		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
 		# Do worker2
 		worker_machine = 'worker2'
@@ -560,28 +582,35 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
 		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
 		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
 		# Log back onto the client
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+
+
+		################################################################################
 		# cluster dns add-on - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/08-dns-addon.md
+		################################################################################
 		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/services/kubedns.yaml')
 		shutit.send('kubectl --namespace=kube-system get svc')
 		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/deployments/kubedns.yaml')
 		shutit.send_and_require('kubectl --namespace=kube-system get pods','Running')
 
+
+		################################################################################
 		# smoke test - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-smoke-test.md
+		################################################################################
 		shutit.send('kubectl run nginx --image=nginx --port=80 --replicas=2')
 		#shutit.send_until('kubectl get pods -o wide','Running')
 		shutit.send('kubectl expose deployment nginx --type NodePort')
 		shutit.send('kubectl get svc')
 		port = shutit.send_and_get_output("""kubectl get svc nginx --output=jsonpath='{range .spec.ports[0]}{.nodePort}'""")
-		
-		shutit.logout()
-		shutit.logout()
 
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
+		
 		# Update haproxy to forward from the lb
 		# Log back onto the client
 		machine = 'load_balancer'
@@ -603,8 +632,8 @@ backend nginxnodes
 EOF''')
 		shutit.send('systemctl restart haproxy')
 		shutit.send('systemctl status haproxy')
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
 
 		# Description of iptables on a worker node
@@ -612,22 +641,25 @@ EOF''')
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto the worker0 node')
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate priviliges to root')
 		shutit.send('iptables --list -t nat',note='List the iptables rules set up by kubernetes to route requests to the service layer to the underlying pods.')
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
-		# Leave the user on the client
+		# Leave the user on the client after completing smoke test
 		machine = 'client'
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.send('curl http://' + load_balancer_ip + ':' + port)
 		shutit.pause_point('')
-		shutit.logout()
-		shutit.logout()
+		shutit.logout(note='Log out of root')
+		shutit.logout(note='Log out of machine: ' + machine)
 
 
 
 
 
+		################################################################################
 		# cleanup - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/10-cleanup.md
+		################################################################################
 		# Not needed - just run ./destroy_vms.sh
 		return True
 
