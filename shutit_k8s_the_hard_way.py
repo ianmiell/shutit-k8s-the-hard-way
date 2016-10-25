@@ -113,13 +113,6 @@ defaults
     timeout connect 5000
     timeout client  50000
     timeout server  50000
-    errorfile 400 /etc/haproxy/errors/400.http
-    errorfile 403 /etc/haproxy/errors/403.http
-    errorfile 408 /etc/haproxy/errors/408.http
-    errorfile 500 /etc/haproxy/errors/500.http
-    errorfile 502 /etc/haproxy/errors/502.http
-    errorfile 503 /etc/haproxy/errors/503.http
-    errorfile 504 /etc/haproxy/errors/504.http
 
 frontend k8snodes
     bind *:6443
@@ -537,22 +530,45 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""")
 		# TODO: there's a problem here (altho everything else seems to work):
 		# ip route add here? https://github.com/kubernetes/kubernetes/issues/27161
 		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address} {.spec.podCIDR} {.spec.externalID} {"\n"}{end}'""")
-		# TODO: Vagrant's 10.0.2.15 gets in the way here?
-#10.0.2.15 10.200.0.0/24 worker0 
-#10.0.2.15 10.200.1.0/24 worker1 
-#10.0.2.15 10.200.2.0/24 worker2 
+		worker0cidr = shutit.send(r"""kubectl get nodes --output=jsonpath='{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker0 | awk '{print $1}'""")
+		worker1cidr = shutit.send(r"""kubectl get nodes --output=jsonpath='{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker1 | awk '{print $1}'""")
+		worker2cidr = shutit.send(r"""kubectl get nodes --output=jsonpath='{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker2 | awk '{print $1}'""")
+		# Log out of client
+		shutit.logout()
+		shutit.logout()
 
-# TODO: is the route the same each time?
-#On worker0:
-#ip route add 10.200.1.0/24 via 192.168.2.6
-#ip route add 10.200.2.0/24 via 192.168.2.7
-#On worker1:
-#ip route add 10.200.0.0/24 via 192.168.2.5
-#ip route add 10.200.2.0/24 via 192.168.2.7
-#On worker2:
-#ip route add 10.200.0.0/24 via 192.168.2.5
-#ip route add 10.200.1.0/24 via 192.168.2.6
+		# Log onto each of the workers and add the route to each node. We are
+		# doing layer3 networking, so ...
+		# Do worker0
+		worker_machine = 'worker0'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
+		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
+		shutit.logout()
+		shutit.logout()
 
+		# Do worker1
+		worker_machine = 'worker1'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
+		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
+		shutit.logout()
+		shutit.logout()
+
+		# Do worker2
+		worker_machine = 'worker2'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
+		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
+		shutit.logout()
+		shutit.logout()
+
+		# Log back onto the client
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
 		# cluster dns add-on - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/08-dns-addon.md
 		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/services/kubedns.yaml')
 		shutit.send('kubectl --namespace=kube-system get svc')
