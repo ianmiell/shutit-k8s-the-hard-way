@@ -430,7 +430,7 @@ WantedBy=multi-user.target" > /etc/systemd/system/docker.service'""",note='Set u
 			shutit.send('systemctl daemon-reload',note='Reload the systemctl config.')
 			shutit.send('systemctl enable docker',note='Enable the docker service')
 			shutit.send('systemctl start docker',note='Start the docker service')
-			shutit.send('docker version',note='Check the docker version')
+			shutit.send('sleep 5 && docker version',note='Check the docker version')
 			shutit.send('mkdir -p /opt/cni',note='Create a folder for the cni plugin')
 			shutit.send('curl -L https://storage.googleapis.com/kubernetes-release/network-plugins/cni-07a8a28637e97b22eb8dfe710eeae1344f69d16e.tar.gz | tar -zxvf - -C /opt/cni',note='Download and untar the cni plugin')
 			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl',note='Get the kubectl binary')
@@ -668,28 +668,7 @@ EOF''')
 		shutit.get_config(self.module_id,'vagrant_image',default='velocity42/xenial64')
 		shutit.get_config(self.module_id,'vagrant_provider',default='virtualbox')
 		shutit.get_config(self.module_id,'gui',default='false')
-		shutit.get_config(self.module_id,'memory',default='1024')
-
-		return True
-
-	def test(self, shutit):
-
-		return True
-
-	def finalize(self, shutit):
-
-		return True
-
-	def isinstalled(self, shutit):
-
-		return False
-
-	def start(self, shutit):
-
-		return True
-
-	def stop(self, shutit):
-
+		shutit.get_config(self.module_id,'memory',default='256')
 		return True
 
 def module():
