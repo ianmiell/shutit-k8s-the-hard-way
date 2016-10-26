@@ -632,7 +632,7 @@ backend nginxnodes
     server worker2 ''' + worker2ip + ''':''' + port + ''' check
 EOF''')
 		shutit.send('systemctl restart haproxy')
-		shutit.send('systemctl status haproxy')
+		shutit.send('systemctl status haproxy --no-pager')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 
@@ -649,13 +649,12 @@ EOF''')
 		machine = 'client'
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
-		shutit.send('curl http://' + load_balancer_ip + ':' + port)
+		# Wait a bit for everything to settle.
+		shutit.send('sleep 30')
+		shutit.send_until('curl http://' + load_balancer_ip + ':' + port,'.*nginx.*')
 		shutit.pause_point('')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
-
-
-
 
 
 		################################################################################
