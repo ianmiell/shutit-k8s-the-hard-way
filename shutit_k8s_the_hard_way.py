@@ -594,29 +594,29 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		################################################################################
 		# cluster dns add-on - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/08-dns-addon.md
 		################################################################################
-		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/services/kubedns.yaml')
-		shutit.send('kubectl --namespace=kube-system get svc')
-		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/deployments/kubedns.yaml')
-		shutit.send_and_require('kubectl --namespace=kube-system get pods','Running')
+		shutit.send('curl https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/services/kubedns.yaml',note='Show the yaml that creates the kubedns service.')
+		shutit.send('curl https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/services/kubedns.yaml',note='Show the yaml that creates the kubedns deployment.')
+		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/services/kubedns.yaml',note='Create the kubedns service from the yaml.')
+		shutit.send('kubectl --namespace=kube-system get svc',note='Check the service is in the kube-system namespace')
+		shutit.send('kubectl create -f https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/deployments/kubedns.yaml',note='Create the kubedns deployment.')
+		shutit.send_and_require('kubectl --namespace=kube-system get pods','Running',note='Show the pod now running in the kube-system namespace.')
 
 
 		################################################################################
 		# smoke test - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-smoke-test.md
 		################################################################################
-		shutit.send('kubectl run nginx --image=nginx --port=80 --replicas=2')
+		shutit.send('kubectl run nginx --image=nginx --port=80 --replicas=2',note='As a smoke test, run the nginx image with two pods across this cluster')
 		#shutit.send_until('kubectl get pods -o wide','Running')
-		shutit.send('kubectl expose deployment nginx --type NodePort')
-		shutit.send('kubectl get svc')
-		port = shutit.send_and_get_output("""kubectl get svc nginx --output=jsonpath='{range .spec.ports[0]}{.nodePort}'""")
-
+		shutit.send('kubectl expose deployment nginx --type NodePort',note='Expose the nginx service as a port on the nodes they run on.')
+		shutit.send('kubectl get svc',note='Show the details of the service now running')
+		port = shutit.send_and_get_output("""kubectl get svc nginx --output=jsonpath='{range .spec.ports[0]}{.nodePort}' && echo""",note='Get the assigned port of the nginx service.')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 		
 		# Update haproxy to forward from the lb
-		# Log back onto the client
 		machine = 'load_balancer'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log back onto the load balancer to update haproxy to load balance nginx requests to any one of the three nodes')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
 		shutit.send('''cat >> /etc/haproxy/haproxy.cfg << EOF
 
 frontend nginxk8snodes
@@ -630,9 +630,9 @@ backend nginxnodes
     server worker0 ''' + worker0ip + ''':''' + port + ''' check
     server worker1 ''' + worker1ip + ''':''' + port + ''' check
     server worker2 ''' + worker2ip + ''':''' + port + ''' check
-EOF''')
-		shutit.send('systemctl restart haproxy')
-		shutit.send('systemctl status haproxy --no-pager')
+EOF''',note='Add the haproxy frontend and backend entries to the config.')
+		shutit.send('systemctl restart haproxy',note='Restart the haproxy.')
+		shutit.send('systemctl status haproxy --no-pager',note='Check the status of the haproxy.')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 
@@ -640,19 +640,18 @@ EOF''')
 		# Description of iptables on a worker node
 		machine = 'worker0'
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto the worker0 node')
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate priviliges to root')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
 		shutit.send('iptables --list -t nat',note='List the iptables rules set up by kubernetes to route requests to the service layer to the underlying pods.')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 
 		# Leave the user on the client after completing smoke test
 		machine = 'client'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log back onto the client machine.')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
 		# Wait a bit for everything to settle.
-		shutit.send('sleep 30')
-		shutit.send_until('curl http://' + load_balancer_ip + ':' + port,'.*nginx.*')
-		shutit.pause_point('')
+		shutit.send('sleep 10',note='Wait a little time for the service to settle.')
+		shutit.send_until('curl http://' + load_balancer_ip + ':' + port,'.*nginx.*',note='Curl the load balancer ip for the nginx port')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 
