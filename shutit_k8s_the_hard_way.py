@@ -88,8 +88,9 @@ end''')
 		################################################################################
 		# Set up the load balancer - tcp 6443 as per https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/01-infrastructure-aws.md
 		################################################################################
-		shutit.login(command='vagrant ssh load_balancer',prompt_prefix='load_balancer',note='Log into the load balancer machine')
-		shutit.login(command='sudo su -',prompt_prefix='load_balancer',password='vagrant',note='Elevate to root')
+		machine = 'load_balancer'
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into machine: ' + machine)
+		shutit.login(command='sudo su -',prompt_prefix=machine,password='vagrant',note='Elevate to root')
 		shutit.install('xterm haproxy',note='Install xterm and haproxy. We use haproxy to be the interface for external requests to the kubernetes cluster.')
 		shutit.send('''cat > /etc/haproxy/haproxy.cfg << EOF
 global
