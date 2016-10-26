@@ -522,7 +522,7 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		machine = 'load_balancer'
 		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log back onto the load balancer to restart haproxy (possibly due to health checks failing')
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
-		shutit.send('systemctl restart haproxy')
+		shutit.send('systemctl restart haproxy',note='Restart haproxy')
 		shutit.logout()
 		shutit.logout(note='Log out of machine: ' + machine)
 
@@ -531,25 +531,25 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		# kubectl client - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/06-kubectl.md
 		################################################################################
 		machine = 'client'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log into the client VM to configure the cluster')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges')
 		shutit.install('xterm') # for resize
-		shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl')
-		shutit.send('chmod +x kubectl')
-		shutit.send('mv kubectl /usr/local/bin')
-		shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /root')
-		shutit.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=/root/ca.pem --embed-certs=true --server=https://' + load_balancer_ip + ':6443')
-		shutit.send('kubectl config set-credentials admin --token ' + kube_token)
-		shutit.send('kubectl config set-context default-context --cluster=kubernetes-the-hard-way --user=admin')
-		shutit.send('kubectl config use-context default-context')
-		shutit.send_and_require('kubectl get componentstatuses','etcd-2.*Healthy')
-		shutit.send_and_require('kubectl get nodes','worker2.*Ready')
+		shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl',note='Get the kubectl client binary')
+		shutit.send('chmod +x kubectl',note='Make the binary executable')
+		shutit.send('mv kubectl /usr/local/bin',note='Move the binary into the path')
+		shutit.send('cp /home/vagrant/ca.pem /home/vagrant/kubernetes-key.pem /home/vagrant/kubernetes.pem /root',note='Copy the certificates to /root')
+		shutit.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=/root/ca.pem --embed-certs=true --server=https://' + load_balancer_ip + ':6443',note='Configure the cluster to use the certs and point at the load balancer. Name the cluster "kubernetes-the-hard-way"')
+		shutit.send('kubectl config set-credentials admin --token ' + kube_token,note='Use the token as our credentials')
+		shutit.send('kubectl config set-context default-context --cluster=kubernetes-the-hard-way --user=admin',note='Set the default context on this cluster to user=admin')
+		shutit.send('kubectl config use-context default-context',note='Use the just-created default context')
+		shutit.send_and_require('kubectl get componentstatuses','etcd-2.*Healthy',note='Get the status of components in this cluster, and ensure they are healthy.')
+		shutit.send_and_require('kubectl get nodes','worker2.*Ready',note='Get the details of the nodes in this cluster and ensure they are ready.')
 
 
 		################################################################################
 		# network routes - https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/07-network.md
 		################################################################################
-		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]} {.spec.podCIDR} {.spec.externalID} {"\n"}{end}'""")
+		shutit.send(r"""kubectl get nodes --output=jsonpath='{range .items[*]} {.spec.podCIDR} {.spec.externalID} {"\n"}{end}'""",note='''Now you are going to get the details of the nodes' service network setup. Once we have the CIDR assigned to each host, we can route ip packets send to those hosts to the appropriate subnet in our cluster.''')
 		worker0cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker0 | awk '{print $1}'""")
 		worker1cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker1 | awk '{print $1}'""")
 		worker2cidr = shutit.send_and_get_output(r"""kubectl get nodes --output=jsonpath='{range .items[*]}{.spec.podCIDR} {.spec.externalID} {"\n"}{end}' | grep worker2 | awk '{print $1}'""")
@@ -561,19 +561,19 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		# doing layer3 networking, so ...
 		# Do worker0
 		worker_machine = 'worker0'
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=worker_machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
-		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
-		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=worker_machine,note='Log into ' + machine + ' to set the layer 3 ip routing up.')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine,note='Elevate privileges to root')
+		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip,note='Add the worker1 cidr route to this node.')
+		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip,note='Add the worker2 cidr route to this node.')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 
 		# Do worker1
 		worker_machine = 'worker1'
-		shutit.login(command='vagrant ssh ' + worker_machine,prompt_prefix=worker_machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
-		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
-		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip)
+		shutit.login(command='vagrant ssh ' + worker_machine,prompt_prefix=worker_machine,note='Log into ' + machine + ' to set the layer 3 routing up.')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine,note='Elevate privileges to root')
+		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip,note='Add the worker0 cidr route to this node')
+		shutit.send('ip route add ' + worker2cidr + ' via ' + worker2ip,note='Add the worker2 cidr route to this node')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 
@@ -581,14 +581,14 @@ WantedBy=multi-user.target" > /etc/systemd/system/kube-proxy.service'""",note='C
 		worker_machine = 'worker2'
 		shutit.login(command='vagrant ssh ' + worker_machine,prompt_prefix=worker_machine)
 		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=worker_machine)
-		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip)
-		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip)
+		shutit.send('ip route add ' + worker0cidr + ' via ' + worker0ip,note='Add the worker0 cidr route to this node')
+		shutit.send('ip route add ' + worker1cidr + ' via ' + worker1ip,note='Add the worker1 cidr route to this node')
 		shutit.logout(note='Log out of root')
 		shutit.logout(note='Log out of machine: ' + machine)
 
 		# Log back onto the client
-		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine)
-		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine)
+		shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log back onto the client')
+		shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges to root')
 
 
 		################################################################################
