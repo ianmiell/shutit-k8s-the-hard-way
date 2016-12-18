@@ -397,6 +397,17 @@ EOF''')
 			shutit.login(command='vagrant ssh ' + machine,prompt_prefix=machine,note='Log onto machine: ' + machine)
 			shutit.login(command='sudo su -',password='vagrant',prompt_prefix=machine,note='Elevate privileges on machine: ' + machine)
 			shutit.send_and_require('kubectl get componentstatuses','Healthy',note='Checking the status of the kube cluster from machine: ' + machine)
+http://ianandsarahs.tk/browse/IWT-3520
+http://kubernetes.io/docs/user-guide/namespaces/#setting-the-namespace-preference
+Setting the namespace preference
+You can permanently save the namespace for all subsequent kubectl commands in that context.
+First get your current context:
+$ export CONTEXT=$(kubectl config view | awk '/current-context/ {print $2}')
+Then update the default namespace:
+$ kubectl config set-context $CONTEXT --namespace=<insert-namespace-name-here>
+# Validate it
+$ kubectl config view | grep namespace:
+
 			shutit.logout(note='Log out of root')
 			shutit.logout(note='Log out of machine: ' + machine)
 
