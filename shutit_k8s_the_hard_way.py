@@ -294,12 +294,20 @@ EOF''',note='Create the etcd service file.')
 			shutit.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.5.0/bin/linux/amd64/kubectl',note='Get the binaries')
 			shutit.send('chmod +x kube-apiserver kube-controller-manager kube-scheduler kubectl',note='Chown the binaries')
 			shutit.send('mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/bin/',note='Move the binaries to the path')
-			shutit.send('wget https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/token.csv',note='Get the token file')
-			
-			# TODO: replace default token 'changeme' aka kubetoken in token.csv
-			shutit.send('mv token.csv /var/lib/kubernetes/',note='Move the token file')
-			shutit.send('wget https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/authorization-policy.jsonl',note='Get the authorization policy')
-			shutit.send('mv authorization-policy.jsonl /var/lib/kubernetes/',note='Move the authorization policy to the kubernetes folder')
+                        
+                        # https://github.com/ianmiell/shutit-k8s-the-hard-way/issues/3
+			shutit.send('''cat > /var/lib/kubernetes/token.csv <<EOF
+''' + kube_token + ''',admin,admin
+''' + kube_token + ''',scheduler,scheduler
+''' + kube_token + ''',kubelet,kubelet
+EOF''',note='Add the token file')
+			shutit.send('''cat > /var/lib/kubernetes/authorization-policy.jsonl <<EOF
+{"apiVersion": "abac.authorization.kubernetes.io/v1beta1", "kind": "Policy", "spec": {"user":"*", "nonResourcePath": "*", "readonly": true}}
+{"apiVersion": "abac.authorization.kubernetes.io/v1beta1", "kind": "Policy", "spec": {"user":"admin", "namespace": "*", "resource": "*", "apiGroup": "*"}}
+{"apiVersion": "abac.authorization.kubernetes.io/v1beta1", "kind": "Policy", "spec": {"user":"scheduler", "namespace": "*", "resource": "*", "apiGroup": "*"}}
+{"apiVersion": "abac.authorization.kubernetes.io/v1beta1", "kind": "Policy", "spec": {"user":"kubelet", "namespace": "*", "resource": "*", "apiGroup": "*"}}
+{"apiVersion": "abac.authorization.kubernetes.io/v1beta1", "kind": "Policy", "spec": {"group":"system:serviceaccounts", "namespace": "*", "resource": "*", "apiGroup": "*", "nonResourcePath": "*"}}
+EOF''',note='Add the authorization policy to the kubernetes folder')
 			shutit.send('''cat > kube-apiserver.service <<"EOF"
 [Unit]
 Description=Kubernetes API Server
