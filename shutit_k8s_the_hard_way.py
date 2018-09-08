@@ -30,58 +30,58 @@ class shutit_k8s_the_hard_way(ShutItModule):
     vb.memory = "''' + memory + '''"
   end
 
-  config.vm.define "k8s1" do |k8s1|
-    k8s1.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    k8s1.vm.hostname = "k8s1.vagrant.test"
+  config.vm.define "k8sc1" do |k8sc1|
+    k8sc1.vm.box = ''' + '"' + vagrant_image + '"' + '''
+    k8sc1.vm.hostname = "k8sc1.vagrant.test"
     config.vm.provider :virtualbox do |vb|
-      vb.name = "shutit_k8s_the_hard_way_1"
+      vb.name = "shutit_k8s_the_hard_way_controller1"
     end
   end
-  config.vm.define "k8s2" do |k8s2|
-    k8s2.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    k8s2.vm.hostname = "k8s2.vagrant.test"
+  config.vm.define "k8sc2" do |k8sc2|
+    k8sc2.vm.box = ''' + '"' + vagrant_image + '"' + '''
+    k8sc2.vm.hostname = "k8sc2.vagrant.test"
     config.vm.provider :virtualbox do |vb|
-      vb.name = "shutit_k8s_the_hard_way_2"
+      vb.name = "shutit_k8s_the_hard_way_controller2"
     end
   end
-  config.vm.define "k8s3" do |k8s3|
-    k8s3.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    k8s3.vm.hostname = "k8s3.vagrant.test"
+  config.vm.define "k8sc3" do |k8sc3|
+    k8sc3.vm.box = ''' + '"' + vagrant_image + '"' + '''
+    k8sc3.vm.hostname = "k8sc3.vagrant.test"
     config.vm.provider :virtualbox do |vb|
-      vb.name = "shutit_k8s_the_hard_way_3"
+      vb.name = "shutit_k8s_the_hard_way_controller3"
     end
   end
-  config.vm.define "k8s4" do |k8s4|
-    k8s4.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    k8s4.vm.hostname = "k8s4.vagrant.test"
+  config.vm.define "k8sw1" do |k8sw1|
+    k8sw1.vm.box = ''' + '"' + vagrant_image + '"' + '''
+    k8sw1.vm.hostname = "k8sw1.vagrant.test"
     config.vm.provider :virtualbox do |vb|
-      vb.name = "shutit_k8s_the_hard_way_4"
+      vb.name = "shutit_k8s_the_hard_way_worker1"
     end
   end
-  config.vm.define "k8s5" do |k8s5|
-    k8s5.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    k8s5.vm.hostname = "k8s5.vagrant.test"
+  config.vm.define "k8sw2" do |k8sw2|
+    k8sw2.vm.box = ''' + '"' + vagrant_image + '"' + '''
+    k8sw2.vm.hostname = "k8sw2.vagrant.test"
     config.vm.provider :virtualbox do |vb|
-      vb.name = "shutit_k8s_the_hard_way_5"
+      vb.name = "shutit_k8s_the_hard_way_worker2"
     end
   end
-  config.vm.define "k8s6" do |k8s6|
-    k8s6.vm.box = ''' + '"' + vagrant_image + '"' + '''
-    k8s6.vm.hostname = "k8s6.vagrant.test"
+  config.vm.define "k8sw3" do |k8sw3|
+    k8sw3.vm.box = ''' + '"' + vagrant_image + '"' + '''
+    k8sw3.vm.hostname = "k8sw3.vagrant.test"
     config.vm.provider :virtualbox do |vb|
-      vb.name = "shutit_k8s_the_hard_way_6"
+      vb.name = "shutit_k8s_the_hard_way_worker3"
     end
   end
 end''')
 
 		# machines is a dict of dicts containing information about each machine for you to use.
 		machines = {}
-		machines.update({'k8s1':{'fqdn':'k8s1.vagrant.test'}})
-		machines.update({'k8s2':{'fqdn':'k8s2.vagrant.test'}})
-		machines.update({'k8s3':{'fqdn':'k8s3.vagrant.test'}})
-		machines.update({'k8s4':{'fqdn':'k8s4.vagrant.test'}})
-		machines.update({'k8s5':{'fqdn':'k8s5.vagrant.test'}})
-		machines.update({'k8s6':{'fqdn':'k8s6.vagrant.test'}})
+		machines.update({'k8sc1':{'fqdn':'k8sc1.vagrant.test'}})
+		machines.update({'k8sc2':{'fqdn':'k8sc2.vagrant.test'}})
+		machines.update({'k8sc3':{'fqdn':'k8sc3.vagrant.test'}})
+		machines.update({'k8sw1':{'fqdn':'k8sw1.vagrant.test'}})
+		machines.update({'k8sw2':{'fqdn':'k8sw2.vagrant.test'}})
+		machines.update({'k8sw3':{'fqdn':'k8sw3.vagrant.test'}})
 
 		try:
 			pw = open('secret').read().strip()
@@ -154,6 +154,237 @@ grep -i --color swap /proc/meminfo
 echo "
 /swapfile none            swap    sw              0       0" >> /etc/fstab''')
 			shutit_session.multisend('adduser person',{'Enter new UNIX password':'person','Retype new UNIX password:':'person','Full Name':'','Phone':'','Room':'','Other':'','Is the information correct':'Y'})
+
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-client-tools.md
+		shutit_session = shutit_sessions['k8sc1']
+		shutit_session.send('wget -q --show-progress --https-only --timestamping https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64')
+		shutit_session.send('chmod +x cfssl_linux-amd64 cfssljson_linux-amd64')
+		shutit_session.send('mv cfssl_linux-amd64 /usr/local/bin/cfssl')
+		shutit_session.send('mv cfssljson_linux-amd64 /usr/local/bin/cfssljson')
+		shutit_session.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl')
+		shutit_session.send('chmod +x kubectl')
+		shutit_session.send('mv kubectl /usr/local/bin/')
+
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md
+		# Certificate Authority
+		shutit_session.send('cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "8760h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": ["signing", "key encipherment", "server auth", "client auth"],
+        "expiry": "8760h"
+      }
+    }
+  }
+}
+EOF''')
+		shutit_session.send('cat > ca-csr.json <<EOF
+{
+  "CN": "Kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "Kubernetes",
+      "OU": "CA",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF''')
+		shutit_session.send('cfssl gencert -initca ca-csr.json | cfssljson -bare ca')
+
+		# Admin client certs
+		shutit_session.send('''cat > admin-csr.json <<EOF
+{
+  "CN": "admin",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:masters",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF''')
+		shutit_session.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin')
+
+		# Kubelet client certs
+TODO rewrite in shutit way
+		shutit_session.send('''for instance in worker-0 worker-1 worker-2; do
+cat > ${instance}-csr.json <<EOF
+{
+  "CN": "system:node:${instance}",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:nodes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+
+EXTERNAL_IP=$(gcloud compute instances describe ${instance} --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')
+
+INTERNAL_IP=$(gcloud compute instances describe ${instance} --format 'value(networkInterfaces[0].networkIP)')
+
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=${instance},${EXTERNAL_IP},${INTERNAL_IP} -profile=kubernetes ${instance}-csr.json | cfssljson -bare ${instance}
+done''')
+
+
+
+		# Controller manager client certs
+		shutit_session.send('''cat > kube-controller-manager-csr.json <<EOF
+{
+  "CN": "system:kube-controller-manager",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:kube-controller-manager",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF''')
+		shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager''')
+
+
+		# Kube proxy client certificate
+		shutit_session.send('''cat > kube-proxy-csr.json <<EOF
+{
+  "CN": "system:kube-proxy",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:node-proxier",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF''')
+		shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy''')
+
+		# Scheduler client certificate
+		shutit_session.send('''cat > kube-scheduler-csr.json <<EOF
+{
+  "CN": "system:kube-scheduler",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:kube-scheduler",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF''')
+		shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-scheduler''')
+
+
+		# Kubernetes API server cert
+TODO shutit way
+
+KUBERNETES_PUBLIC_ADDRESS=$(gcloud compute addresses describe kubernetes-the-hard-way \
+  --region $(gcloud config get-value compute/region) \
+  --format 'value(address)')
+
+cat > kubernetes-csr.json <<EOF
+{
+  "CN": "kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "Kubernetes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=10.32.0.1,10.240.0.10,10.240.0.11,10.240.0.12,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,kubernetes.default -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes
+
+		# Service account key pair
+		shutit_session.send('''cat > service-account-csr.json <<EOF
+{
+  "CN": "service-accounts",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "Kubernetes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF''')
+		shutit_session.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes service-account-csr.json | cfssljson -bare service-account')
+
+TODO - distribute certs
+Copy the appropriate certificates and private keys to each worker instance:
+
+for instance in worker-0 worker-1 worker-2; do
+  gcloud compute scp ca.pem ${instance}-key.pem ${instance}.pem ${instance}:~/
+done
+Copy the appropriate certificates and private keys to each controller instance:
+
+for instance in controller-0 controller-1 controller-2; do
+  gcloud compute scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem \
+    service-account-key.pem service-account.pem ${instance}:~/
+done
+
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-configuration-files.md
+		TODO
+
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
