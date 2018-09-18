@@ -136,7 +136,12 @@ end''')
 			ip = shutit.send_and_get_output('''vagrant landrush ls 2> /dev/null | grep -w ^''' + machines[machine]['fqdn'] + ''' | awk '{print $2}' ''')
 			machines.get(machine).update({'ip':ip})
 
-
+                                            
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			for to_machine in sorted(machines.keys()):
+				shutit_session.multisend('ssh-copy-id root@' + to_machine + '.vagrant.test',{'ontinue connecting':'yes','assword':root_pass})
+				shutit_session.multisend('ssh-copy-id root@' + to_machine,{'ontinue connecting':'yes','assword':root_pass})
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
@@ -156,18 +161,18 @@ echo "
 			shutit_session.multisend('adduser person',{'Enter new UNIX password':'person','Retype new UNIX password:':'person','Full Name':'','Phone':'','Room':'','Other':'','Is the information correct':'Y'})
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-client-tools.md
-		shutit_session = shutit_sessions['k8sc1']
-		shutit_session.send('wget -q --show-progress --https-only --timestamping https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64')
-		shutit_session.send('chmod +x cfssl_linux-amd64 cfssljson_linux-amd64')
-		shutit_session.send('mv cfssl_linux-amd64 /usr/local/bin/cfssl')
-		shutit_session.send('mv cfssljson_linux-amd64 /usr/local/bin/cfssljson')
-		shutit_session.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl')
-		shutit_session.send('chmod +x kubectl')
-		shutit_session.send('mv kubectl /usr/local/bin/')
+		shutit_session_k8sc1 = shutit_sessions['k8sc1']
+		shutit_session_k8sc1.send('wget -q --show-progress --https-only --timestamping https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64')
+		shutit_session_k8sc1.send('chmod +x cfssl_linux-amd64 cfssljson_linux-amd64')
+		shutit_session_k8sc1.send('mv cfssl_linux-amd64 /usr/local/bin/cfssl')
+		shutit_session_k8sc1.send('mv cfssljson_linux-amd64 /usr/local/bin/cfssljson')
+		shutit_session_k8sc1.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl')
+		shutit_session_k8sc1.send('chmod +x kubectl')
+		shutit_session_k8sc1.send('mv kubectl /usr/local/bin/')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md
 		# Certificate Authority
-		shutit_session.send('cat > ca-config.json <<EOF
+		shutit_session_k8sc1.send('''cat > ca-config.json <<EOF
 {
   "signing": {
     "default": {
@@ -182,7 +187,7 @@ echo "
   }
 }
 EOF''')
-		shutit_session.send('cat > ca-csr.json <<EOF
+		shutit_session_k8sc1.send('''cat > ca-csr.json <<EOF
 {
   "CN": "Kubernetes",
   "key": {
@@ -200,10 +205,10 @@ EOF''')
   ]
 }
 EOF''')
-		shutit_session.send('cfssl gencert -initca ca-csr.json | cfssljson -bare ca')
+		shutit_session_k8sc1.send('cfssl gencert -initca ca-csr.json | cfssljson -bare ca')
 
 		# Admin client certs
-		shutit_session.send('''cat > admin-csr.json <<EOF
+		shutit_session_k8sc1.send('''cat > admin-csr.json <<EOF
 {
   "CN": "admin",
   "key": {
@@ -221,14 +226,16 @@ EOF''')
   ]
 }
 EOF''')
-		shutit_session.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin')
+		shutit_session_k8sc1.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin')
 
 		# Kubelet client certs
-TODO rewrite in shutit way
-		shutit_session.send('''for instance in worker-0 worker-1 worker-2; do
-cat > ${instance}-csr.json <<EOF
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('worker-0','worker-1','worker-2'):
+				shutit_session.send('''cat > ''' + machine + '''.json <<EOF
+cat > ''' + machine + '''-csr.json <<EOF
 {
-  "CN": "system:node:${instance}",
+  "CN": "system:node:''' + machine + '''",
   "key": {
     "algo": "rsa",
     "size": 2048
@@ -243,20 +250,14 @@ cat > ${instance}-csr.json <<EOF
     }
   ]
 }
-EOF
-
-
-EXTERNAL_IP=$(gcloud compute instances describe ${instance} --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')
-
-INTERNAL_IP=$(gcloud compute instances describe ${instance} --format 'value(networkInterfaces[0].networkIP)')
-
-cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=${instance},${EXTERNAL_IP},${INTERNAL_IP} -profile=kubernetes ${instance}-csr.json | cfssljson -bare ${instance}
-done''')
-
+EOF''')
+				shutit_session.send('EXTERNAL_IP=' + machines[machine]['ip'])
+				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
+				shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=''' + machine + ''',${EXTERNAL_IP},${INTERNAL_IP} -profile=kubernetes ''' + machine + '''-csr.json | cfssljson -bare ''' + machine)
 
 
 		# Controller manager client certs
-		shutit_session.send('''cat > kube-controller-manager-csr.json <<EOF
+		shutit_session_k8sc1.send('''cat > kube-controller-manager-csr.json <<EOF
 {
   "CN": "system:kube-controller-manager",
   "key": {
@@ -274,11 +275,11 @@ done''')
   ]
 }
 EOF''')
-		shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager''')
+		shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager''')
 
 
 		# Kube proxy client certificate
-		shutit_session.send('''cat > kube-proxy-csr.json <<EOF
+		shutit_session_k8sc1.send('''cat > kube-proxy-csr.json <<EOF
 {
   "CN": "system:kube-proxy",
   "key": {
@@ -296,10 +297,10 @@ EOF''')
   ]
 }
 EOF''')
-		shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy''')
+		shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy''')
 
 		# Scheduler client certificate
-		shutit_session.send('''cat > kube-scheduler-csr.json <<EOF
+		shutit_session_k8sc1.send('''cat > kube-scheduler-csr.json <<EOF
 {
   "CN": "system:kube-scheduler",
   "key": {
@@ -317,17 +318,11 @@ EOF''')
   ]
 }
 EOF''')
-		shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-scheduler''')
-
+		shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-scheduler''')
 
 		# Kubernetes API server cert
-TODO shutit way
-
-KUBERNETES_PUBLIC_ADDRESS=$(gcloud compute addresses describe kubernetes-the-hard-way \
-  --region $(gcloud config get-value compute/region) \
-  --format 'value(address)')
-
-cat > kubernetes-csr.json <<EOF
+		shutit_session_k8sc1.send('EXTERNAL_IP=' + machines[machine]['ip'])
+		shutit_session_k8sc1.send('''cat > kubernetes-csr.json <<EOF
 {
   "CN": "kubernetes",
   "key": {
@@ -344,12 +339,11 @@ cat > kubernetes-csr.json <<EOF
     }
   ]
 }
-EOF
-
-cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=10.32.0.1,10.240.0.10,10.240.0.11,10.240.0.12,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,kubernetes.default -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes
+EOF''')
+		shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=10.32.0.1,10.240.0.10,10.240.0.11,10.240.0.12,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,kubernetes.default -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes''')
 
 		# Service account key pair
-		shutit_session.send('''cat > service-account-csr.json <<EOF
+		shutit_session_k8sc1.send('''cat > service-account-csr.json <<EOF
 {
   "CN": "service-accounts",
   "key": {
@@ -367,28 +361,22 @@ cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=10.
   ]
 }
 EOF''')
-		shutit_session.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes service-account-csr.json | cfssljson -bare service-account')
-
-TODO - distribute certs
-Copy the appropriate certificates and private keys to each worker instance:
-
-for instance in worker-0 worker-1 worker-2; do
-  gcloud compute scp ca.pem ${instance}-key.pem ${instance}.pem ${instance}:~/
-done
-Copy the appropriate certificates and private keys to each controller instance:
-
-for instance in controller-0 controller-1 controller-2; do
-  gcloud compute scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem \
-    service-account-key.pem service-account.pem ${instance}:~/
-done
-
-		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-configuration-files.md
-		TODO
+		shutit_session_k8sc1.send('cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes service-account-csr.json | cfssljson -bare service-account')
 
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
+			if machine in ('worker-0','worker-1','worker-2'):
+				shutit_session_k8sc1.send('scp ca.pem ' + machine + '-key.pem ' + machine + '.pem ' + machine + ':~/')
+			if machine in ('controller-0','controller-1','controller-2'):
+  				shutit_session_k8sc1.send('scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem ' + machine + ':~/')
+
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-configuration-files.md
+
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
 			shutit_session.send('hostname')
+			shutit_session.pause_point('ok')
 
 
 		return True
