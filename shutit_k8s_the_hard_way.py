@@ -136,7 +136,20 @@ end''')
 			ip = shutit.send_and_get_output('''vagrant landrush ls 2> /dev/null | grep -w ^''' + machines[machine]['fqdn'] + ''' | awk '{print $2}' ''')
 			machines.get(machine).update({'ip':ip})
 
-                                            
+
+		###############################################################################
+		# Set root password
+		root_pass = 'lowbunker'
+		###############################################################################
+
+		###############################################################################
+		# Set up hosts for chef appropriate for their role
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			# Set root password
+			shutit_session.send('echo root:' + root_pass + ' | /usr/sbin/chpasswd')
+			shutit_session.send('cd /root')
+
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			for to_machine in sorted(machines.keys()):
