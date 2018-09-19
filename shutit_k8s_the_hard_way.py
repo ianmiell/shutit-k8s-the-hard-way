@@ -447,6 +447,38 @@ EOF''')
 				shutit_session_k8sc1.send('scp encryption-config.yaml ' + machine + ':~/')
 
 		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/07-bootstrapping-etcd.md
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('controller-0','controller-1','controller-2'):
+				shutit_session.send('wget -q --show-progress --https-only --timestamping "https://github.com/coreos/etcd/releases/download/v3.3.5/etcd-v3.3.5-linux-amd64.tar.gz"')
+				shutit_session.send('tar -xvf etcd-v3.3.5-linux-amd64.tar.gz')
+				shutit_session.send('mv etcd-v3.3.5-linux-amd64/etcd* /usr/local/bin/')
+				shutit_session.send('mkdir -p /etc/etcd /var/lib/etcd')
+				shutit_session.send('cp ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/')
+				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
+				shutit_session.send(r'''ETCD_NAME=$(hostname -s)
+cat <<EOF | sudo tee /etc/systemd/system/etcd.service
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+ExecStart=/usr/local/bin/etcd --name ${ETCD_NAME} --cert-file=/etc/etcd/kubernetes.pem --key-file=/etc/etcd/kubernetes-key.pem --peer-cert-file=/etc/etcd/kubernetes.pem --peer-key-file=/etc/etcd/kubernetes-key.pem --trusted-ca-file=/etc/etcd/ca.pem --peer-trusted-ca-file=/etc/etcd/ca.pem --peer-client-cert-auth --client-cert-auth --initial-advertise-peer-urls https://${INTERNAL_IP}:2380 --listen-peer-urls https://${INTERNAL_IP}:2380 --listen-client-urls https://${INTERNAL_IP}:2379,https://127.0.0.1:2379 --advertise-client-urls https://${INTERNAL_IP}:2379 --initial-cluster-token etcd-cluster-0 --initial-cluster controller-0=https://10.240.0.10:2380,controller-1=https://10.240.0.11:2380,controller-2=https://10.240.0.12:2380 --initial-cluster-state new --data-dir=/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF''')
+				shutit_session.send('systemctl daemon-reload')
+				shutit_session.send('systemctl enable etcd')
+
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('controller-0','controller-1','controller-2'):
+				shutit_session.send('systemctl start etcd')
+
+		shutit_session_k8sc1.send_until('ETCDCTL_API=3 etcdctl member list --endpoints=https://127.0.0.1:2379 --cacert=/etc/etcd/ca.pem --cert=/etc/etcd/kubernetes.pem --key=/etc/etcd/kubernetes-key.pem | grep -w started | wc -l','3')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
