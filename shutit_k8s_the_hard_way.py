@@ -382,9 +382,9 @@ EOF''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sw1','k8sw2','k8sw3'):
-				shutit_session_k8sc1.send('scp ca.pem ' + machine + '-key.pem ' + machine + '.pem ' + machine + ':~/')
+				shutit_session_k8sc1.multisend('scp ca.pem ' + machine + '-key.pem ' + machine + '.pem ' + machine + ':~/',{'onnecting':'yes'})
 			if machine in ('k8sc1','k8sc2','k8sc3'):
-  				shutit_session_k8sc1.send('scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem ' + machine + ':~/')
+  				shutit_session_k8sc1.multisend('scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem ' + machine + ':~/',{'onnecting':'yes'})
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-configuration-files.md
 		shutit_session_k8sc1.send('KUBERNETES_PUBLIC_ADDRESS=' + machines['k8sc1']['ip'])
@@ -421,9 +421,9 @@ EOF''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sw1','k8sw2','k8sw3'):
-				shutit_session_k8sc1.send('scp ' + machine + '.kubeconfig kube-proxy.kubeconfig ' + machine + ':~/')
+				shutit_session_k8sc1.multisend('scp ' + machine + '.kubeconfig kube-proxy.kubeconfig ' + machine + ':~/',{'onnecting':'yes'})
 			if machine in ('k8sc1','k8sc2','k8sc3'):
-				shutit_session_k8sc1.send('scp admin.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ' + machine + ':~/')
+				shutit_session_k8sc1.multisend('scp admin.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ' + machine + ':~/',{'onnecting':'yes'})
 
 		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/06-data-encryption-keys.md
 		shutit_session_k8sc1.send('ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)')
@@ -443,7 +443,7 @@ EOF''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sc1','k8sc2','k8sc3'):
-				shutit_session_k8sc1.send('scp encryption-config.yaml ' + machine + ':~/')
+				shutit_session_k8sc1.multisend('scp encryption-config.yaml ' + machine + ':~/',{'onnecting':'yes'})
 
 		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/07-bootstrapping-etcd.md
 		for machine in sorted(machines.keys()):
