@@ -248,7 +248,7 @@ EOF''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sw1','k8sw2','k8sw3'):
-				shutit_session.send('''cat > ''' + machine + '''.json <<EOF
+				shutit_session_k8sc1.send('''cat > ''' + machine + '''-csr.json <<EOF
 {
   "CN": "system:node:''' + machine + '''",
   "key": {
@@ -266,9 +266,9 @@ EOF''')
   ]
 }
 EOF''')
-				shutit_session.send('EXTERNAL_IP=' + machines[machine]['ip'])
-				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
-				shutit_session.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=''' + machine + ''',${EXTERNAL_IP},${INTERNAL_IP} -profile=kubernetes ''' + machine + '''-csr.json | cfssljson -bare ''' + machine)
+				shutit_session_k8sc1.send('EXTERNAL_IP=' + machines[machine]['ip'])
+				shutit_session_k8sc1.send('INTERNAL_IP=' + machines[machine]['ip'])
+				shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=''' + machine + ''',${EXTERNAL_IP},${INTERNAL_IP} -profile=kubernetes ''' + machine + '''-csr.json | cfssljson -bare ''' + machine)
 
 
 		# Controller manager client certs
