@@ -174,14 +174,15 @@ echo "
 			shutit_session.multisend('adduser person',{'Enter new UNIX password':'person','Retype new UNIX password:':'person','Full Name':'','Phone':'','Room':'','Other':'','Is the information correct':'Y'})
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-client-tools.md
-		shutit_session_k8sc1 = shutit_sessions['k8sc1']
-		shutit_session_k8sc1.send('wget -q --show-progress --https-only --timestamping https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64')
-		shutit_session_k8sc1.send('chmod +x cfssl_linux-amd64 cfssljson_linux-amd64')
-		shutit_session_k8sc1.send('mv cfssl_linux-amd64 /usr/local/bin/cfssl')
-		shutit_session_k8sc1.send('mv cfssljson_linux-amd64 /usr/local/bin/cfssljson')
-		shutit_session_k8sc1.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl')
-		shutit_session_k8sc1.send('chmod +x kubectl')
-		shutit_session_k8sc1.send('mv kubectl /usr/local/bin/')
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			shutit_session.send('wget -q --show-progress --https-only --timestamping https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64')
+			shutit_session.send('chmod +x cfssl_linux-amd64 cfssljson_linux-amd64')
+			shutit_session.send('mv cfssl_linux-amd64 /usr/local/bin/cfssl')
+			shutit_session.send('mv cfssljson_linux-amd64 /usr/local/bin/cfssljson')
+			shutit_session.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl')
+			shutit_session.send('chmod +x kubectl')
+			shutit_session.send('mv kubectl /usr/local/bin/')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md
 		# Certificate Authority
@@ -391,8 +392,6 @@ EOF''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('worker-0','worker-1','worker-2'):
-
-TODO: make shutit-friendly
 			shutit_session.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=ca.pem --embed-certs=true --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 --kubeconfig=' + machine + '.kubeconfig')
 			shutit_session.send('kubectl config set-credentials system:node:' + machine + ' --client-certificate=' + machine + '.pem --client-key=${instance}-key.pem --embed-certs=true --kubeconfig=' + machine + '.kubeconfig')
 			shutit_session.send('kubectl config set-context default --cluster=kubernetes-the-hard-way --user=system:node:' + machine + ' --kubeconfig=' + machine + '.kubeconfig')
@@ -440,7 +439,6 @@ resources:
               secret: ${ENCRYPTION_KEY}
       - identity: {}
 EOF''')
-
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('controller-0','controller-1','controller-2'):
