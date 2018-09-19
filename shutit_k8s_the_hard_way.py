@@ -186,6 +186,8 @@ echo "
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md
 		# Certificate Authority
+
+		shutit_session_k8sc1 = shutit_sessions['k8sc1']
 		shutit_session_k8sc1.send('''cat > ca-config.json <<EOF
 {
   "signing": {
