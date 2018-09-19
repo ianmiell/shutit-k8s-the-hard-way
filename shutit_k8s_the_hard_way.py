@@ -247,7 +247,7 @@ EOF''')
 		# Kubelet client certs
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			if machine in ('worker-0','worker-1','worker-2'):
+			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session.send('''cat > ''' + machine + '''.json <<EOF
 cat > ''' + machine + '''-csr.json <<EOF
 {
@@ -382,9 +382,9 @@ EOF''')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			if machine in ('worker-0','worker-1','worker-2'):
+			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session_k8sc1.send('scp ca.pem ' + machine + '-key.pem ' + machine + '.pem ' + machine + ':~/')
-			if machine in ('controller-0','controller-1','controller-2'):
+			if machine in ('k8sc1','k8sc2','k8sc3'):
   				shutit_session_k8sc1.send('scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem ' + machine + ':~/')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-configuration-files.md
@@ -393,7 +393,7 @@ EOF''')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			if machine in ('worker-0','worker-1','worker-2'):
+			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=ca.pem --embed-certs=true --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 --kubeconfig=' + machine + '.kubeconfig')
 				shutit_session.send('kubectl config set-credentials system:node:' + machine + ' --client-certificate=' + machine + '.pem --client-key=${instance}-key.pem --embed-certs=true --kubeconfig=' + machine + '.kubeconfig')
 				shutit_session.send('kubectl config set-context default --cluster=kubernetes-the-hard-way --user=system:node:' + machine + ' --kubeconfig=' + machine + '.kubeconfig')
@@ -421,9 +421,9 @@ EOF''')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			if machine in ('worker-0','worker-1','worker-2'):
+			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session_k8sc1.send('scp ' + machine + '.kubeconfig kube-proxy.kubeconfig ' + machine + ':~/')
-			if machine in ('controller-0','controller-1','controller-2'):
+			if machine in ('k8sc1','k8sc2','k8sc3'):
 				shutit_session_k8sc1.send('scp admin.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ' + machine + ':~/')
 
 		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/06-data-encryption-keys.md
@@ -443,13 +443,13 @@ resources:
 EOF''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			if machine in ('controller-0','controller-1','controller-2'):
+			if machine in ('k8sc1','k8sc2','k8sc3'):
 				shutit_session_k8sc1.send('scp encryption-config.yaml ' + machine + ':~/')
 
 		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/07-bootstrapping-etcd.md
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			if machine in ('controller-0','controller-1','controller-2'):
+			if machine in ('k8sc1','k8sc2','k8sc3'):
 				shutit_session.send('wget -q --show-progress --https-only --timestamping "https://github.com/coreos/etcd/releases/download/v3.3.5/etcd-v3.3.5-linux-amd64.tar.gz"')
 				shutit_session.send('tar -xvf etcd-v3.3.5-linux-amd64.tar.gz')
 				shutit_session.send('mv etcd-v3.3.5-linux-amd64/etcd* /usr/local/bin/')
@@ -463,7 +463,7 @@ Description=etcd
 Documentation=https://github.com/coreos
 
 [Service]
-ExecStart=/usr/local/bin/etcd --name ${ETCD_NAME} --cert-file=/etc/etcd/kubernetes.pem --key-file=/etc/etcd/kubernetes-key.pem --peer-cert-file=/etc/etcd/kubernetes.pem --peer-key-file=/etc/etcd/kubernetes-key.pem --trusted-ca-file=/etc/etcd/ca.pem --peer-trusted-ca-file=/etc/etcd/ca.pem --peer-client-cert-auth --client-cert-auth --initial-advertise-peer-urls https://${INTERNAL_IP}:2380 --listen-peer-urls https://${INTERNAL_IP}:2380 --listen-client-urls https://${INTERNAL_IP}:2379,https://127.0.0.1:2379 --advertise-client-urls https://${INTERNAL_IP}:2379 --initial-cluster-token etcd-cluster-0 --initial-cluster controller-0=https://10.240.0.10:2380,controller-1=https://10.240.0.11:2380,controller-2=https://10.240.0.12:2380 --initial-cluster-state new --data-dir=/var/lib/etcd
+ExecStart=/usr/local/bin/etcd --name ${ETCD_NAME} --cert-file=/etc/etcd/kubernetes.pem --key-file=/etc/etcd/kubernetes-key.pem --peer-cert-file=/etc/etcd/kubernetes.pem --peer-key-file=/etc/etcd/kubernetes-key.pem --trusted-ca-file=/etc/etcd/ca.pem --peer-trusted-ca-file=/etc/etcd/ca.pem --peer-client-cert-auth --client-cert-auth --initial-advertise-peer-urls https://${INTERNAL_IP}:2380 --listen-peer-urls https://${INTERNAL_IP}:2380 --listen-client-urls https://${INTERNAL_IP}:2379,https://127.0.0.1:2379 --advertise-client-urls https://${INTERNAL_IP}:2379 --initial-cluster-token etcd-cluster-0 --initial-cluster k8sc1=https://10.240.0.10:2380,k8sc2=https://10.240.0.11:2380,k8sc3=https://10.240.0.12:2380 --initial-cluster-state new --data-dir=/var/lib/etcd
 Restart=on-failure
 RestartSec=5
 
@@ -475,7 +475,7 @@ EOF''')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			if machine in ('controller-0','controller-1','controller-2'):
+			if machine in ('k8sc1','k8sc2','k8sc3'):
 				shutit_session.send('systemctl start etcd')
 
 		shutit_session_k8sc1.send_until('ETCDCTL_API=3 etcdctl member list --endpoints=https://127.0.0.1:2379 --cacert=/etc/etcd/ca.pem --cert=/etc/etcd/kubernetes.pem --key=/etc/etcd/kubernetes-key.pem | grep -w started | wc -l','3')
