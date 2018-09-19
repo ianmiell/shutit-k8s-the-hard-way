@@ -249,7 +249,6 @@ EOF''')
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session.send('''cat > ''' + machine + '''.json <<EOF
-cat > ''' + machine + '''-csr.json <<EOF
 {
   "CN": "system:node:''' + machine + '''",
   "key": {
@@ -456,8 +455,8 @@ EOF''')
 				shutit_session.send('mkdir -p /etc/etcd /var/lib/etcd')
 				shutit_session.send('cp ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/')
 				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
-				shutit_session.send(r'''ETCD_NAME=$(hostname -s)
-cat <<EOF | sudo tee /etc/systemd/system/etcd.service
+				shutit_session.send('ETCD_NAME=$(hostname -s)')
+				shutit_session.send('''cat <<EOF | sudo tee /etc/systemd/system/etcd.service
 [Unit]
 Description=etcd
 Documentation=https://github.com/coreos
