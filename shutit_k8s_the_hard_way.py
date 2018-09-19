@@ -96,7 +96,7 @@ end''')
 		# Set up the sessions
 		shutit_sessions = {}
 		for machine in sorted(machines.keys()):
-			shutit_sessions.update({machine:shutit.create_session('bash')})
+			shutit_sessions.update({machine:shutit.create_session('bash', loglevel='debug')})
 		# Set up and validate landrush
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
@@ -148,6 +148,7 @@ end''')
 			shutit_session = shutit_sessions[machine]
 			# Set root password
 			shutit_session.send('echo root:' + root_pass + ' | /usr/sbin/chpasswd')
+			shutit_session.send('cd /root')
 			shutit_session.send('cd /root')
 
 		for machine in sorted(machines.keys()):
