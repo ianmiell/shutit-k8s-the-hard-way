@@ -105,7 +105,7 @@ end''')
 			shutit_session.send('vagrant landrush rm ' + machines[machine]['fqdn'])
 			# Needs to be done serially for stability reasons.
 			try:
-				shutit_session.multisend('vagrant up --provider ' + shutit.cfg['shutit-library.virtualization.virtualization.virtualization']['virt_method'] + machine_name,{'assword for':pw,'assword:':pw})
+				shutit_session.multisend('vagrant up --provider ' + shutit.cfg['shutit-library.virtualization.virtualization.virtualization']['virt_method'] + machine,{'assword for':pw,'assword:':pw})
 			except NameError:
 				shutit.multisend('vagrant up ' + machine,{'assword for':pw,'assword:':pw},timeout=99999)
 			if shutit.send_and_get_output("vagrant status 2> /dev/null | grep -w ^" + machine + " | awk '{print $2}'") != 'running':
@@ -149,7 +149,7 @@ end''')
 			# Set root password
 			shutit_session.send('echo root:' + root_pass + ' | /usr/sbin/chpasswd')
 			shutit_session.send('cd /root')
-			shutit_session.send('cd /root')
+			shutit_session.multisend('ssh-keygen',{'save the key':'','passphrase':''})
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
