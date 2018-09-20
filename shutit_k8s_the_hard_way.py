@@ -143,19 +143,22 @@ end''')
 		###############################################################################
 
 		###############################################################################
-		# Set up hosts for chef appropriate for their role
+		# Set up hosts
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			# Set root password
 			shutit_session.send('echo root:' + root_pass + ' | /usr/sbin/chpasswd')
 			shutit_session.send('cd /root')
-			shutit_session.multisend('ssh-keygen',{'save the key':'','passphrase':''})
+	
+		# Set up key from c1	
+		shutit_session_k8sc1 = shutit_sessions['k8sc1']
+		shutit_session_k8sc1.multisend('ssh-keygen',{'save the key':'','passphrase':''})
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			for to_machine in sorted(machines.keys()):
-				shutit_session.multisend('ssh-copy-id root@' + to_machine + '.vagrant.test',{'ontinue connecting':'yes','assword':root_pass})
-				shutit_session.multisend('ssh-copy-id root@' + to_machine,{'ontinue connecting':'yes','assword':root_pass})
+				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine + '.vagrant.test',{'ontinue connecting':'yes','assword':root_pass})
+				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine,{'ontinue connecting':'yes','assword':root_pass})
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
@@ -187,8 +190,6 @@ echo "
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md
 		# Certificate Authority
-
-		shutit_session_k8sc1 = shutit_sessions['k8sc1']
 		shutit_session_k8sc1.send('''cat > ca-config.json <<EOF
 {
   "signing": {
