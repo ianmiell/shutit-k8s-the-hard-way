@@ -149,6 +149,9 @@ end''')
 			# Set root password
 			shutit_session.send('echo root:' + root_pass + ' | /usr/sbin/chpasswd')
 			shutit_session.send('cd /root')
+			shutit_session.send('''sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config''')
+			shutit_session.send('''sed -i 's/.*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config''')
+			shutit_session.send('service sshd restart')
 			shutit_session.multisend('ssh-keygen',{'save the key':'','passphrase':''})
 	
 		# Set up key from c1	
