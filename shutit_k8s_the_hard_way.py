@@ -399,7 +399,7 @@ EOF''')
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=ca.pem --embed-certs=true --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 --kubeconfig=' + machine + '.kubeconfig')
-				shutit_session.send('kubectl config set-credentials system:node:' + machine + ' --client-certificate=' + machine + '.pem --client-key=${instance}-key.pem --embed-certs=true --kubeconfig=' + machine + '.kubeconfig')
+				shutit_session.send('kubectl config set-credentials system:node:' + machine + ' --client-certificate=' + machine + '.pem --client-key=' + machine + '-key.pem --embed-certs=true --kubeconfig=' + machine + '.kubeconfig')
 				shutit_session.send('kubectl config set-context default --cluster=kubernetes-the-hard-way --user=system:node:' + machine + ' --kubeconfig=' + machine + '.kubeconfig')
 				shutit_session.send('kubectl config use-context default --kubeconfig=' + machine + '.kubeconfig')
 
