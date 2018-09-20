@@ -736,13 +736,40 @@ RestartSec=5
 WoantedBy=multi-user.target
 EOF''')
  
-				shutit_session.send('
+				shutit_session.send('mv kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig')
+				shutit_session.send('''cat <<EOF | sudo tee /var/lib/kube-proxy/kube-proxy-config.yaml
+kind: KubeProxyConfiguration
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+clientConnection:
+  kubeconfig: "/var/lib/kube-proxy/kubeconfig"
+mode: "iptables"
+clusterCIDR: "10.200.0.0/16"
+EOF''')
+				shutit_session.send('''cat <<EOF | sudo tee /etc/systemd/system/kube-proxy.service
+[Unit]
+Description=Kubernetes Kube Proxy
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-proxy --config=/var/lib/kube-proxy/kube-proxy-config.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF''')
+
+
+				shutit_session.send('systemctl daemon-reload')
+				shutit_session.send('systemctl enable containerd kubelet kube-proxy')
+				shutit_session.send('systemctl start containerd kubelet kube-proxy')
+				shutit_session.send('kubectl get nodes --kubeconfig admin.kubeconfig')
 
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			shutit_session.send('hostname')
-			shutit_session.pause_point('ok')
+			shutit_session.pause_point('kubectl get nodes --kubeconfig admin.kubeconfig')
 
 
 		return True
