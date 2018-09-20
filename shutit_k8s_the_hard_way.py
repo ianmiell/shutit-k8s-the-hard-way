@@ -273,7 +273,7 @@ EOF''')
 EOF''')
 				shutit_session_k8sc1.send('EXTERNAL_IP=' + machines[machine]['ip'])
 				shutit_session_k8sc1.send('INTERNAL_IP=' + machines[machine]['ip'])
-				shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=''' + machine + ''',${EXTERNAL_IP},${INTERNAL_IP} -profile=kubernetes ''' + machine + '''-csr.json | cfssljson -bare ''' + machine)
+				shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=''' + machine + ''',''' + machines[machine]['fqdn'] + ''',${EXTERNAL_IP},${INTERNAL_IP} -profile=kubernetes ''' + machine + '''-csr.json | cfssljson -bare ''' + machine)
 
 
 		# Controller manager client certs
@@ -360,7 +360,7 @@ EOF''')
   ]
 }
 EOF''')
-		shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=10.32.0.1,10.240.0.10,10.240.0.11,10.240.0.12,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,kubernetes.default -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes''')
+		shutit_session_k8sc1.send('''cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -hostname=10.32.0.1,10.240.0.10,10.240.0.11,10.240.0.12,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,kubernetes.default,k8sc1,k8sc2,k8sc3,k8sw1,k8sw2,k8sw3,k8sc1.vagrant.test,k8sc2.vagrant.test,k8sc3.vagrant.test,k8sw1.vagrant.test,k8sw2.vagrant.test,k8sw3.vagrant.test,''' + machines['k8sc1']['ip'] + ',' + machines['k8sc2']['ip'] + ',' + machines['k8sc3']['ip'] + ',' + machines['k8sw1']['ip'] + ',' + machines['k8sw2']['ip'] + ',' + machines['k8sw3']['ip'] + ''' -profile=kubernetes kubernetes-csr.json | cfssljson -bare kubernetes''')
 
 		# Service account key pair
 		shutit_session_k8sc1.send('''cat > service-account-csr.json <<EOF
@@ -451,6 +451,7 @@ EOF''')
 				shutit_session_k8sc1.multisend('scp encryption-config.yaml ' + machine + ':~/',{'onnecting':'yes'})
 
 		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/07-bootstrapping-etcd.md
+		
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sc1','k8sc2','k8sc3'):
@@ -467,7 +468,7 @@ Description=etcd
 Documentation=https://github.com/coreos
 
 [Service]
-ExecStart=/usr/local/bin/etcd --name ${ETCD_NAME} --cert-file=/etc/etcd/kubernetes.pem --key-file=/etc/etcd/kubernetes-key.pem --peer-cert-file=/etc/etcd/kubernetes.pem --peer-key-file=/etc/etcd/kubernetes-key.pem --trusted-ca-file=/etc/etcd/ca.pem --peer-trusted-ca-file=/etc/etcd/ca.pem --peer-client-cert-auth --client-cert-auth --initial-advertise-peer-urls https://${INTERNAL_IP}:2380 --listen-peer-urls https://${INTERNAL_IP}:2380 --listen-client-urls https://${INTERNAL_IP}:2379,https://127.0.0.1:2379 --advertise-client-urls https://${INTERNAL_IP}:2379 --initial-cluster-token etcd-cluster-0 --initial-cluster k8sc1=https://k8sc1:2380,k8sc2=https://k8sc2:2380,k8sc3=https://k8sc3:2380 --initial-cluster-state new --data-dir=/var/lib/etcd
+ExecStart=/usr/local/bin/etcd --name ${ETCD_NAME} --cert-file=/etc/etcd/kubernetes.pem --key-file=/etc/etcd/kubernetes-key.pem --peer-cert-file=/etc/etcd/kubernetes.pem --peer-key-file=/etc/etcd/kubernetes-key.pem --trusted-ca-file=/etc/etcd/ca.pem --peer-trusted-ca-file=/etc/etcd/ca.pem --peer-client-cert-auth --client-cert-auth --initial-advertise-peer-urls https://${INTERNAL_IP}:2380 --listen-peer-urls https://${INTERNAL_IP}:2380 --listen-client-urls https://${INTERNAL_IP}:2379,https://127.0.0.1:2379 --advertise-client-urls https://${INTERNAL_IP}:2379 --initial-cluster-token etcd-cluster-0 --initial-cluster k8sc1=https://''' + machines['k8sc1']['ip'] + ''':2380,k8sc2=https://''' + machines['k8sc2']['ip'] + ''':2380,k8sc3=https://''' + machines['k8sc3']['ip'] + ''':2380 --initial-cluster-state new --data-dir=/var/lib/etcd
 Restart=on-failure
 RestartSec=5
 
@@ -483,6 +484,158 @@ EOF''')
 				shutit_session.send('systemctl start etcd')
 
 		shutit_session_k8sc1.send_until('ETCDCTL_API=3 etcdctl member list --endpoints=https://127.0.0.1:2379 --cacert=/etc/etcd/ca.pem --cert=/etc/etcd/kubernetes.pem --key=/etc/etcd/kubernetes-key.pem | grep -w started | wc -l','3')
+
+
+		
+		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/08-bootstrapping-kubernetes-controllers.md
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('k8sc1','k8sc2','k8sc3'):
+				shutit_session.send('mkdir -p /etc/kubernetes/config')
+				shutit_session.send('wget -q --show-progress --https-only --timestamping "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-apiserver" "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-controller-manager" "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-scheduler" "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl"')
+
+				shutit_session.send('chmod +x kube-apiserver kube-controller-manager kube-scheduler kubectl')
+				shutit_session.send('mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/')
+				shutit_session.send('mkdir -p /var/lib/kubernetes/')
+				shutit_session.send('mv ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem encryption-config.yaml /var/lib/kubernetes/')
+				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
+				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/kube-apiserver.service
+[Unit]
+Description=Kubernetes API Server
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-apiserver --advertise-address=${INTERNAL_IP} --allow-privileged=true --apiserver-count=3 --audit-log-maxage=30 --audit-log-maxbackup=3 --audit-log-maxsize=100 --audit-log-path=/var/log/audit.log --authorization-mode=Node,RBAC --bind-address=0.0.0.0 --client-ca-file=/var/lib/kubernetes/ca.pem --enable-admission-plugins=Initializers,NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota --enable-swagger-ui=true --etcd-cafile=/var/lib/kubernetes/ca.pem --etcd-certfile=/var/lib/kubernetes/kubernetes.pem --etcd-keyfile=/var/lib/kubernetes/kubernetes-key.pem --etcd-servers=https://''' + machines['k8sc1']['ip'] + ''':2379,https://''' + machines['k8sc2']['ip'] + ''':2379,https://''' + machines['k8sc3']['ip'] + ''':2379 --event-ttl=1h --experimental-encryption-provider-config=/var/lib/kubernetes/encryption-config.yaml --kubelet-certificate-authority=/var/lib/kubernetes/ca.pem --kubelet-client-certificate=/var/lib/kubernetes/kubernetes.pem --kubelet-client-key=/var/lib/kubernetes/kubernetes-key.pem --kubelet-https=true --runtime-config=api/all --service-account-key-file=/var/lib/kubernetes/service-account.pem --service-cluster-ip-range=10.32.0.0/24 --service-node-port-range=30000-32767 --tls-cert-file=/var/lib/kubernetes/kubernetes.pem --tls-private-key-file=/var/lib/kubernetes/kubernetes-key.pem --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF''')
+
+				shutit_session.send('mv kube-controller-manager.kubeconfig /var/lib/kubernetes/')
+
+				shutit_session.send('''cat <<EOF | sudo tee /etc/systemd/system/kube-controller-manager.service
+[Unit]
+Description=Kubernetes Controller Manager
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-controller-manager --address=0.0.0.0 --cluster-cidr=10.200.0.0/16 --cluster-name=kubernetes --cluster-signing-cert-file=/var/lib/kubernetes/ca.pem --cluster-signing-key-file=/var/lib/kubernetes/ca-key.pem --kubeconfig=/var/lib/kubernetes/kube-controller-manager.kubeconfig --leader-elect=true --root-ca-file=/var/lib/kubernetes/ca.pem --service-account-private-key-file=/var/lib/kubernetes/service-account-key.pem --service-cluster-ip-range=10.32.0.0/24 --use-service-account-credentials=true --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF''')
+
+				shutit_session.send('mv kube-scheduler.kubeconfig /var/lib/kubernetes/')
+				shutit_session.send('''cat <<EOF | sudo tee /etc/kubernetes/config/kube-scheduler.yaml
+apiVersion: componentconfig/v1alpha1
+kind: KubeSchedulerConfiguration
+clientConnection:
+  kubeconfig: "/var/lib/kubernetes/kube-scheduler.kubeconfig"
+leaderElection:
+  leaderElect: true
+EOF''')
+				shutit_session.send('''cat <<EOF | sudo tee /etc/systemd/system/kube-scheduler.service
+[Unit]
+Description=Kubernetes Scheduler
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-scheduler --config=/etc/kubernetes/config/kube-scheduler.yaml --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF''')
+
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('k8sc1','k8sc2','k8sc3'):
+				shutit_session.send('systemctl daemon-reload')
+				shutit_session.send('systemctl enable kube-apiserver kube-controller-manager kube-scheduler')
+				shutit_session.send('systemctl start kube-apiserver kube-controller-manager kube-scheduler')
+
+
+
+				shutit_session.send('apt-get install -y nginx')
+				shutit_session.send('''cat > kubernetes.default.svc.cluster.local <<EOF
+server {
+  listen      80;
+  server_name kubernetes.default.svc.cluster.local;
+
+  location /healthz {
+     proxy_pass                    https://127.0.0.1:6443/healthz;
+     proxy_ssl_trusted_certificate /var/lib/kubernetes/ca.pem;
+  }
+}
+EOF''')
+
+				shutit_session.send('mv kubernetes.default.svc.cluster.local /etc/nginx/sites-available/kubernetes.default.svc.cluster.local')
+				shutit_session.send('ln -s /etc/nginx/sites-available/kubernetes.default.svc.cluster.local /etc/nginx/sites-enabled/')
+
+				shutit_session.send('systemctl restart nginx')
+				shutit_session.send('systemctl enable nginx')
+
+				shutit_session.send_until('kubectl get componentstatuses --kubeconfig admin.kubeconfig | grep Healthy | wc -l','5')
+				shutit_session.send('curl -H "Host: kubernetes.default.svc.cluster.local" -i http://127.0.0.1/healthz')
+				shutit_session.send('''cat <<EOF | kubectl apply --kubeconfig admin.kubeconfig -f -
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+  name: system:kube-apiserver-to-kubelet
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes/proxy
+      - nodes/stats
+      - nodes/log
+      - nodes/spec
+      - nodes/metrics
+    verbs:
+      - "*"
+EOF''')
+				shutit_session.send('''cat <<EOF | kubectl apply --kubeconfig admin.kubeconfig -f -
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: system:kube-apiserver
+  namespace: ""
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-apiserver-to-kubelet
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: kubernetes
+EOF''')
+
+		# Load balancer skipped - we use k8sc1
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('k8sw1','k8sw2','k8sw3'):
+				shutit_session.install('socat')
+				shutit_session.install('conntrack')
+				shutit_session.install('ipset')
+				shutit_session.send('wget -q --show-progress --https-only --timestamping https://github.com/kubernetes-incubator/cri-tools/releases/download/v1.0.0-beta.0/crictl-v1.0.0-beta.0-linux-amd64.tar.gz https://storage.googleapis.com/kubernetes-the-hard-way/runsc https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5/runc.amd64 https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz https://github.com/containerd/containerd/releases/download/v1.1.0/containerd-1.1.0.linux-amd64.tar.gz https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubelet')
+				shutit_session.send('sudo mkdir -p /etc/cni/net.d /opt/cni/bin /var/lib/kubelet /var/lib/kube-proxy /var/lib/kubernetes /var/run/kubernetes')
+				shutit_session.send('chmod +x kubectl kube-proxy kubelet runc.amd64 runsc')
+				shutit_session.send('mv runc.amd64 runc')
+				shutit_session.send('mv kubectl kube-proxy kubelet runc runsc /usr/local/bin/')
+				shutit_session.send('tar -xvf crictl-v1.0.0-beta.0-linux-amd64.tar.gz -C /usr/local/bin/')
+				shutit_session.send('tar -xvf cni-plugins-amd64-v0.6.0.tgz -C /opt/cni/bin/')
+				shutit_session.send('tar -xvf containerd-1.1.0.linux-amd64.tar.gz -C /')
+				shutit_session.send('POD_CIDR=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr)')
+				shutit_session.pause_point('POD_CIDR?')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
