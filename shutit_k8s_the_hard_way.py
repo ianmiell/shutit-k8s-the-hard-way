@@ -149,16 +149,16 @@ end''')
 			# Set root password
 			shutit_session.send('echo root:' + root_pass + ' | /usr/sbin/chpasswd')
 			shutit_session.send('cd /root')
+			shutit_session.multisend('ssh-keygen',{'save the key':'','passphrase':''})
 	
 		# Set up key from c1	
 		shutit_session_k8sc1 = shutit_sessions['k8sc1']
-		shutit_session_k8sc1.multisend('ssh-keygen',{'save the key':'','passphrase':''})
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			for to_machine in sorted(machines.keys()):
-				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine + '.vagrant.test',{'ontinue connecting':'yes','assword':root_pass}, fail_on_empty_before=False)
-				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine,{'ontinue connecting':'yes','assword':root_pass}, fail_on_empty_before=False)
+				shutit_session.multisend('ssh-copy-id root@' + to_machine + '.vagrant.test',{'ontinue connecting':'yes','assword':root_pass}, fail_on_empty_before=False)
+				shutit_session.multisend('ssh-copy-id root@' + to_machine,{'ontinue connecting':'yes','assword':root_pass}, fail_on_empty_before=False)
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
