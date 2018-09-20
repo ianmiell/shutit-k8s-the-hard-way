@@ -157,8 +157,8 @@ end''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			for to_machine in sorted(machines.keys()):
-				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine + '.vagrant.test',{'ontinue connecting':'yes','assword':root_pass})
-				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine,{'ontinue connecting':'yes','assword':root_pass})
+				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine + '.vagrant.test',{'ontinue connecting':'yes','assword':root_pass}, fail_on_empty_before=False)
+				shutit_session_k8sc1.multisend('ssh-copy-id root@' + to_machine,{'ontinue connecting':'yes','assword':root_pass}, fail_on_empty_before=False)
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
