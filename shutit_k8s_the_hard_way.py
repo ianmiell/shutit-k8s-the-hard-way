@@ -462,7 +462,7 @@ EOF''')
 				shutit_session.send('cp ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/')
 				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
 				shutit_session.send('ETCD_NAME=$(hostname -s)')
-				shutit_session.send('''cat <<EOF | sudo tee /etc/systemd/system/etcd.service
+				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/etcd.service
 [Unit]
 Description=etcd
 Documentation=https://github.com/coreos
@@ -515,7 +515,7 @@ EOF''')
 
 				shutit_session.send('mv kube-controller-manager.kubeconfig /var/lib/kubernetes/')
 
-				shutit_session.send('''cat <<EOF | sudo tee /etc/systemd/system/kube-controller-manager.service
+				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/kube-controller-manager.service
 [Unit]
 Description=Kubernetes Controller Manager
 Documentation=https://github.com/kubernetes/kubernetes
@@ -530,7 +530,7 @@ WantedBy=multi-user.target
 EOF''')
 
 				shutit_session.send('mv kube-scheduler.kubeconfig /var/lib/kubernetes/')
-				shutit_session.send('''cat <<EOF | sudo tee /etc/kubernetes/config/kube-scheduler.yaml
+				shutit_session.send('''cat <<EOF | tee /etc/kubernetes/config/kube-scheduler.yaml
 apiVersion: componentconfig/v1alpha1
 kind: KubeSchedulerConfiguration
 clientConnection:
@@ -538,7 +538,7 @@ clientConnection:
 leaderElection:
   leaderElect: true
 EOF''')
-				shutit_session.send('''cat <<EOF | sudo tee /etc/systemd/system/kube-scheduler.service
+				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/kube-scheduler.service
 [Unit]
 Description=Kubernetes Scheduler
 Documentation=https://github.com/kubernetes/kubernetes
@@ -627,15 +627,117 @@ EOF''')
 				shutit_session.install('conntrack')
 				shutit_session.install('ipset')
 				shutit_session.send('wget -q --show-progress --https-only --timestamping https://github.com/kubernetes-incubator/cri-tools/releases/download/v1.0.0-beta.0/crictl-v1.0.0-beta.0-linux-amd64.tar.gz https://storage.googleapis.com/kubernetes-the-hard-way/runsc https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5/runc.amd64 https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz https://github.com/containerd/containerd/releases/download/v1.1.0/containerd-1.1.0.linux-amd64.tar.gz https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubelet')
-				shutit_session.send('sudo mkdir -p /etc/cni/net.d /opt/cni/bin /var/lib/kubelet /var/lib/kube-proxy /var/lib/kubernetes /var/run/kubernetes')
+				shutit_session.send('mkdir -p /etc/cni/net.d /opt/cni/bin /var/lib/kubelet /var/lib/kube-proxy /var/lib/kubernetes /var/run/kubernetes')
 				shutit_session.send('chmod +x kubectl kube-proxy kubelet runc.amd64 runsc')
 				shutit_session.send('mv runc.amd64 runc')
 				shutit_session.send('mv kubectl kube-proxy kubelet runc runsc /usr/local/bin/')
 				shutit_session.send('tar -xvf crictl-v1.0.0-beta.0-linux-amd64.tar.gz -C /usr/local/bin/')
 				shutit_session.send('tar -xvf cni-plugins-amd64-v0.6.0.tgz -C /opt/cni/bin/')
 				shutit_session.send('tar -xvf containerd-1.1.0.linux-amd64.tar.gz -C /')
-				shutit_session.send('POD_CIDR=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr)')
-				shutit_session.pause_point('POD_CIDR?')
+				shutit_session.send('POD_CIDR=10.200.0.0/16')
+				shutit_session.send('''cat <<EOF | tee /etc/cni/net.d/10-bridge.conf
+{
+    "cniVersion": "0.3.1",
+    "name": "bridge",
+    "type": "bridge",
+    "bridge": "cnio0",
+    "isGateway": true,
+    "ipMasq": true,
+    "ipam": {
+        "type": "host-local",
+        "ranges": [
+          [{"subnet": "${POD_CIDR}"}]
+        ],
+        "routes": [{"dst": "0.0.0.0/0"}]
+    }
+}
+EOF''')
+				shutit_session.send('''cat <<EOF | tee /etc/cni/net.d/99-loopback.conf
+{
+    "cniVersion": "0.3.1",
+    "type": "loopback"
+}
+EOF''')
+
+				shutit_session.send('mkdir -p /etc/containerd')
+				shutit_session.send('''cat <<EOF | tee /etc/containerd/config.toml
+[plugins]
+  [plugins.cri.containerd]
+    snapshotter = "overlayfs"
+    [plugins.cri.containerd.default_runtime]
+      runtime_type = "io.containerd.runtime.v1.linux"
+      runtime_engine = "/usr/local/bin/runc"
+      runtime_root = ""
+    [plugins.cri.containerd.untrusted_workload_runtime]
+      runtime_type = "io.containerd.runtime.v1.linux"
+      runtime_engine = "/usr/local/bin/runsc"
+      runtime_root = "/run/containerd/runsc"
+EOF''')
+				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/containerd.service
+[Unit]
+Description=containerd container runtime
+Documentation=https://containerd.io
+After=network.target
+
+[Service]
+ExecStartPre=/sbin/modprobe overlay
+ExecStart=/bin/containerd
+Restart=always
+RestartSec=5
+Delegate=yes
+KillMode=process
+OOMScoreAdjust=-999
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF''')
+				shutit_session.send('mv ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/')
+				shutit_session.send('mv ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig')
+				shutit_session.send('mv ca.pem /var/lib/kubernetes/')
+				shutit_session.send('''cat <<EOF | tee /var/lib/kubelet/kubelet-config.yaml
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: "/var/lib/kubernetes/ca.pem"
+authorization:
+  mode: Webhook
+clusterDomain: "cluster.local"
+clusterDNS:
+  - "10.32.0.10"
+podCIDR: "${POD_CIDR}"
+runtimeRequestTimeout: "15m"
+tlsCertFile: "/var/lib/kubelet/${HOSTNAME}.pem"
+tlsPrivateKeyFile: "/var/lib/kubelet/${HOSTNAME}-key.pem"
+EOF''')
+
+
+
+				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/kubelet.service
+[Unit]
+Description=Kubernetes Kubelet
+Documentation=https://github.com/kubernetes/kubernetes
+After=containerd.service
+Requires=containerd.service
+
+[Service]
+ExecStart=/usr/local/bin/kubelet --config=/var/lib/kubelet/kubelet-config.yaml --container-runtime=remote --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --image-pull-progress-deadline=2m --kubeconfig=/var/lib/kubelet/kubeconfig --network-plugin=cni --register-node=true --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WoantedBy=multi-user.target
+EOF''')
+ 
+				shutit_session.send('
+
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
