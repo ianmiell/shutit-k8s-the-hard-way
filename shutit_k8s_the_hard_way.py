@@ -185,11 +185,11 @@ echo "
 			shutit_session = shutit_sessions[machine]
 			shutit_session.send('wget -q --show-progress --https-only --timestamping https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64')
 			shutit_session.send('chmod +x cfssl_linux-amd64 cfssljson_linux-amd64')
-			shutit_session.send('mv cfssl_linux-amd64 /usr/local/bin/cfssl')
-			shutit_session.send('mv cfssljson_linux-amd64 /usr/local/bin/cfssljson')
+			shutit_session.send('cp cfssl_linux-amd64 /usr/local/bin/cfssl')
+			shutit_session.send('cp cfssljson_linux-amd64 /usr/local/bin/cfssljson')
 			shutit_session.send('wget https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl')
 			shutit_session.send('chmod +x kubectl')
-			shutit_session.send('mv kubectl /usr/local/bin/')
+			shutit_session.send('cp kubectl /usr/local/bin/')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/04-certificate-authority.md
 		# Certificate Authority
@@ -457,7 +457,7 @@ EOF''')
 			if machine in ('k8sc1','k8sc2','k8sc3'):
 				shutit_session.send('wget -q --show-progress --https-only --timestamping "https://github.com/coreos/etcd/releases/download/v3.3.5/etcd-v3.3.5-linux-amd64.tar.gz"')
 				shutit_session.send('tar -xvf etcd-v3.3.5-linux-amd64.tar.gz')
-				shutit_session.send('mv etcd-v3.3.5-linux-amd64/etcd* /usr/local/bin/')
+				shutit_session.send('cp etcd-v3.3.5-linux-amd64/etcd* /usr/local/bin/')
 				shutit_session.send('mkdir -p /etc/etcd /var/lib/etcd')
 				shutit_session.send('cp ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/')
 				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
@@ -495,9 +495,9 @@ EOF''')
 				shutit_session.send('wget -q --show-progress --https-only --timestamping "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-apiserver" "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-controller-manager" "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-scheduler" "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl"')
 
 				shutit_session.send('chmod +x kube-apiserver kube-controller-manager kube-scheduler kubectl')
-				shutit_session.send('mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/')
+				shutit_session.send('cp kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/')
 				shutit_session.send('mkdir -p /var/lib/kubernetes/')
-				shutit_session.send('mv ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem encryption-config.yaml /var/lib/kubernetes/')
+				shutit_session.send('cp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem encryption-config.yaml /var/lib/kubernetes/')
 				shutit_session.send('INTERNAL_IP=' + machines[machine]['ip'])
 				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/kube-apiserver.service
 [Unit]
@@ -513,7 +513,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF''')
 
-				shutit_session.send('mv kube-controller-manager.kubeconfig /var/lib/kubernetes/')
+				shutit_session.send('cp kube-controller-manager.kubeconfig /var/lib/kubernetes/')
 
 				shutit_session.send('''cat <<EOF | tee /etc/systemd/system/kube-controller-manager.service
 [Unit]
@@ -529,7 +529,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF''')
 
-				shutit_session.send('mv kube-scheduler.kubeconfig /var/lib/kubernetes/')
+				shutit_session.send('cp kube-scheduler.kubeconfig /var/lib/kubernetes/')
 				shutit_session.send('''cat <<EOF | tee /etc/kubernetes/config/kube-scheduler.yaml
 apiVersion: componentconfig/v1alpha1
 kind: KubeSchedulerConfiguration
@@ -574,7 +574,7 @@ server {
 }
 EOF''')
 
-				shutit_session.send('mv kubernetes.default.svc.cluster.local /etc/nginx/sites-available/kubernetes.default.svc.cluster.local')
+				shutit_session.send('cp kubernetes.default.svc.cluster.local /etc/nginx/sites-available/kubernetes.default.svc.cluster.local')
 				shutit_session.send('ln -s /etc/nginx/sites-available/kubernetes.default.svc.cluster.local /etc/nginx/sites-enabled/')
 
 				shutit_session.send('systemctl restart nginx')
@@ -633,8 +633,8 @@ EOF''')
 				shutit_session.send('wget -q --show-progress --https-only --timestamping https://github.com/kubernetes-incubator/cri-tools/releases/download/v1.0.0-beta.0/crictl-v1.0.0-beta.0-linux-amd64.tar.gz https://storage.googleapis.com/kubernetes-the-hard-way/runsc https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5/runc.amd64 https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz https://github.com/containerd/containerd/releases/download/v1.1.0/containerd-1.1.0.linux-amd64.tar.gz https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubelet')
 				shutit_session.send('mkdir -p /etc/cni/net.d /opt/cni/bin /var/lib/kubelet /var/lib/kube-proxy /var/lib/kubernetes /var/run/kubernetes')
 				shutit_session.send('chmod +x kubectl kube-proxy kubelet runc.amd64 runsc')
-				shutit_session.send('mv runc.amd64 runc')
-				shutit_session.send('mv kubectl kube-proxy kubelet runc runsc /usr/local/bin/')
+				shutit_session.send('cp runc.amd64 runc')
+				shutit_session.send('cp kubectl kube-proxy kubelet runc runsc /usr/local/bin/')
 				shutit_session.send('tar -xvf crictl-v1.0.0-beta.0-linux-amd64.tar.gz -C /usr/local/bin/')
 				shutit_session.send('tar -xvf cni-plugins-amd64-v0.6.0.tgz -C /opt/cni/bin/')
 				shutit_session.send('tar -xvf containerd-1.1.0.linux-amd64.tar.gz -C /')
@@ -698,9 +698,9 @@ LimitCORE=infinity
 [Install]
 WantedBy=multi-user.target
 EOF''')
-				shutit_session.send('mv ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/')
-				shutit_session.send('mv ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig')
-				shutit_session.send('mv ca.pem /var/lib/kubernetes/')
+				shutit_session.send('cp ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/')
+				shutit_session.send('cp ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig')
+				shutit_session.send('cp ca.pem /var/lib/kubernetes/')
 				shutit_session.send('''cat <<EOF | tee /var/lib/kubelet/kubelet-config.yaml
 kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
@@ -740,7 +740,7 @@ RestartSec=5
 WoantedBy=multi-user.target
 EOF''')
  
-				shutit_session.send('mv kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig')
+				shutit_session.send('cp kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig')
 				shutit_session.send('''cat <<EOF | sudo tee /var/lib/kube-proxy/kube-proxy-config.yaml
 kind: KubeProxyConfiguration
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
