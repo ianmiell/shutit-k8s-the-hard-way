@@ -165,19 +165,6 @@ end''')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
-			shutit_session.run_script(r'''#!/bin/sh
-# See https://raw.githubusercontent.com/ianmiell/vagrant-swapfile/master/vagrant-swapfile.sh
-fallocate -l ''' + shutit.cfg[self.module_id]['swapsize'] + r''' /swapfile
-ls -lh /swapfile
-chown root:root /swapfile
-chmod 0600 /swapfile
-ls -lh /swapfile
-mkswap /swapfile
-swapon /swapfile
-swapon -s
-grep -i --color swap /proc/meminfo
-echo "
-/swapfile none            swap    sw              0       0" >> /etc/fstab''')
 			shutit_session.multisend('adduser person',{'Enter new UNIX password':'person','Retype new UNIX password:':'person','Full Name':'','Phone':'','Room':'','Other':'','Is the information correct':'Y'})
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-client-tools.md
@@ -392,17 +379,16 @@ EOF''')
   				shutit_session_k8sc1.multisend('scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem ' + machine + ':~/',{'onnecting':'yes'})
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/05-kubernetes-configuration-files.md
-		shutit_session_k8sc1.send('KUBERNETES_PUBLIC_ADDRESS=' + machines['k8sc1']['ip'])
-
-
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
+			shutit_session.send('KUBERNETES_PUBLIC_ADDRESS=' + machines['k8sc1']['ip'])
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=ca.pem --embed-certs=true --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 --kubeconfig=' + machine + '.kubeconfig')
 				shutit_session.send('kubectl config set-credentials system:node:' + machine + ' --client-certificate=' + machine + '.pem --client-key=' + machine + '-key.pem --embed-certs=true --kubeconfig=' + machine + '.kubeconfig')
 				shutit_session.send('kubectl config set-context default --cluster=kubernetes-the-hard-way --user=system:node:' + machine + ' --kubeconfig=' + machine + '.kubeconfig')
 				shutit_session.send('kubectl config use-context default --kubeconfig=' + machine + '.kubeconfig')
 
+		shutit_session_k8sc1.send('KUBERNETES_PUBLIC_ADDRESS=' + machines['k8sc1']['ip'])
 		shutit_session_k8sc1.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=ca.pem --embed-certs=true --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 --kubeconfig=kube-proxy.kubeconfig')
 		shutit_session_k8sc1.send('kubectl config set-credentials system:kube-proxy --client-certificate=kube-proxy.pem --client-key=kube-proxy-key.pem --embed-certs=true --kubeconfig=kube-proxy.kubeconfig')
 		shutit_session_k8sc1.send('kubectl config set-context default --cluster=kubernetes-the-hard-way --user=system:kube-proxy --kubeconfig=kube-proxy.kubeconfig')
@@ -782,7 +768,7 @@ EOF''')
 		shutit_session_k8sc1.send('kubectl get nodes')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/11-pod-network-routes.md
-		shutit_session.pause_point('')
+		shutit_session_k8sc1.pause_point('')
 
 
 		for machine in sorted(machines.keys()):
