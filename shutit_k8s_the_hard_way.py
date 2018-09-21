@@ -582,7 +582,8 @@ EOF''')
 
 				shutit_session.send_until('kubectl get componentstatuses --kubeconfig admin.kubeconfig | grep Healthy | wc -l','5')
 				shutit_session.send('curl -H "Host: kubernetes.default.svc.cluster.local" -i http://127.0.0.1/healthz')
-				shutit_session.send('''cat <<EOF | kubectl apply --kubeconfig admin.kubeconfig -f -
+		shutit_session_k8sc1.send('sleep 30')
+		shutit_session_k8sc1.send('''cat <<EOF | kubectl apply --kubeconfig admin.kubeconfig -f -
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
 metadata:
@@ -603,7 +604,7 @@ rules:
     verbs:
       - "*"
 EOF''')
-				shutit_session.send('''cat <<EOF | kubectl apply --kubeconfig admin.kubeconfig -f -
+		shutit_session_k8sc1.send('''cat <<EOF | kubectl apply --kubeconfig admin.kubeconfig -f -
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
 metadata:
