@@ -768,6 +768,8 @@ EOF''')
 		shutit_session_k8sc1.send('kubectl get nodes')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/11-pod-network-routes.md
+		# TODO: Use OVN: https://github.com/openvswitch/ovn-kubernetes
+
 		shutit_session_k8sc1.pause_point('')
 
 
