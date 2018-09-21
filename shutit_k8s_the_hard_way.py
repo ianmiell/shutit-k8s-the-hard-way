@@ -620,6 +620,9 @@ subjects:
 EOF''')
 
 		# Load balancer skipped - we use k8sc1
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-bootstrapping-kubernetes-workers.md
+		# POD CIDR hard-coded to 10.200.0.0/16
+		pod_cidr = '10.200.0.0/16'
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sw1','k8sw2','k8sw3'):
@@ -634,7 +637,7 @@ EOF''')
 				shutit_session.send('tar -xvf crictl-v1.0.0-beta.0-linux-amd64.tar.gz -C /usr/local/bin/')
 				shutit_session.send('tar -xvf cni-plugins-amd64-v0.6.0.tgz -C /opt/cni/bin/')
 				shutit_session.send('tar -xvf containerd-1.1.0.linux-amd64.tar.gz -C /')
-				shutit_session.send('POD_CIDR=10.200.0.0/16')
+				shutit_session.send('POD_CIDR=' + pod_cidr)
 				shutit_session.send('''cat <<EOF | tee /etc/cni/net.d/10-bridge.conf
 {
     "cniVersion": "0.3.1",
@@ -762,14 +765,28 @@ EOF''')
 
 				shutit_session.send('systemctl daemon-reload')
 				shutit_session.send('systemctl enable containerd kubelet kube-proxy')
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session.send('systemctl start containerd kubelet kube-proxy')
-				shutit_session.send('kubectl get nodes --kubeconfig admin.kubeconfig')
+
+		shutit_session_k8sc1.send('kubectl get nodes --kubeconfig admin.kubeconfig')
+
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/10-configuring-kubectl.md
+		shutit_session_k8sc1.send('kubectl config set-cluster kubernetes-the-hard-way --certificate-authority=ca.pem --embed-certs=true --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443')
+		shutit_session_k8sc1.send('kubectl config set-credentials admin --client-certificate=admin.pem --client-key=admin-key.pem')
+		shutit_session_k8sc1.send('kubectl config set-context kubernetes-the-hard-way --cluster=kubernetes-the-hard-way --user=admin')
+		shutit_session_k8sc1.send('kubectl config use-context kubernetes-the-hard-way')
+		shutit_session_k8sc1.send('kubectl get componentstatuses')
+		shutit_session_k8sc1.send('kubectl get nodes')
+
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/11-pod-network-routes.md
+		shutit_session.pause_point('')
 
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			shutit_session.send('hostname')
-			shutit_session.pause_point('kubectl get nodes --kubeconfig admin.kubeconfig')
 
 
 		return True
