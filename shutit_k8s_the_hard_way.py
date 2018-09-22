@@ -769,8 +769,30 @@ EOF''')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/11-pod-network-routes.md
 		# TODO: Use OVN: https://github.com/openvswitch/ovn-kubernetes
-
-		shutit_session_k8sc1.pause_point('')
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			# https://github.com/openvswitch/ovn-kubernetes/blob/master/docs/INSTALL.UBUNTU.md
+			shutit_session.send('apt-get install apt-transport-https')
+			shutit_session.send('echo "deb http://18.191.116.101/openvswitch/stable /" |  sudo tee /etc/apt/sources.list.d/openvswitch.list')
+			shutit_session.send('wget -O - http://18.191.116.101/openvswitch/keyFile |  sudo apt-key add -')
+			shutit_session.send('apt-get update -y')
+			shutit_session.send('apt-get build-dep -y dkms')
+			shutit_session.send('apt-get install python-six openssl -y')
+			shutit_session.send('apt-get install openvswitch-datapath-dkms -y')
+			shutit_session.send('apt-get install openvswitch-switch openvswitch-common -y')
+			if machine == 'k8sc1':
+				shutit_session.send('apt-get install ovn-central ovn-common ovn-host -y')
+				shutit_session.install('golang-go')
+				shutit_session.send('export GOPATH=$HOME/work')
+				shutit_session.send('mkdir -p $GOPATH/github.com/openvswitch')
+				shutit_session.send('cd $GOPATH/github.com/openvswitch')
+				shutit_session.send('git clone https://github.com/openvswitch/ovn-kubernetes')
+				shutit_session.send('cd ovn-kubernetes/go-controller')
+				shutit_session.send('make')
+				shutit_session.send('make install')
+			else:
+				shutit_session.send('apt-get install ovn-common ovn-host -y')
+		shutit_session_k8sc1.pause_point('back to here https://github.com/openvswitch/ovn-kubernetes and nohup sudo ovnkube')
 
 
 		for machine in sorted(machines.keys()):
@@ -785,7 +807,7 @@ EOF''')
 		shutit.get_config(self.module_id,'vagrant_image',default='ubuntu/bionic64')
 		shutit.get_config(self.module_id,'vagrant_provider',default='virtualbox')
 		shutit.get_config(self.module_id,'gui',default='false')
-		shutit.get_config(self.module_id,'memory',default='1024')
+		shutit.get_config(self.module_id,'memory',default='2048')
 		shutit.get_config(self.module_id,'swapsize',default='2G')
 		return True
 
