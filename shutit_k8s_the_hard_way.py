@@ -35,6 +35,7 @@ class shutit_k8s_the_hard_way(ShutItModule):
     k8sc1.vm.hostname = "k8sc1.vagrant.test"
     config.vm.provider :virtualbox do |vb|
       vb.name = "shutit_k8s_the_hard_way_controller1"
+      vb.memory = "3072"
     end
   end
   config.vm.define "k8sc2" do |k8sc2|
@@ -783,9 +784,10 @@ EOF''')
 			if machine == 'k8sc1':
 				shutit_session.send('apt-get install ovn-central ovn-common ovn-host -y')
 				#shutit_session.install('golang-go')
-				shutit_session.send('add-apt-repository ppa:gophers/archive')
+				shutit_session.multisend('add-apt-repository ppa:gophers/archive',{'to continue':''})
 				shutit_session.send('apt-get update -y')
 				shutit_session.send('apt-get install -y golang-1.10-go')
+				shutit_session.send('PATH=/usr/lib/go-1.10/bin')
 				shutit_session.send('export GOPATH=$HOME/work')
 				shutit_session.send('mkdir -p $GOPATH/github.com/openvswitch')
 				shutit_session.send('cd $GOPATH/github.com/openvswitch')
@@ -811,7 +813,7 @@ EOF''')
 		shutit.get_config(self.module_id,'vagrant_image',default='ubuntu/xenial64')
 		shutit.get_config(self.module_id,'vagrant_provider',default='virtualbox')
 		shutit.get_config(self.module_id,'gui',default='false')
-		shutit.get_config(self.module_id,'memory',default='2048')
+		shutit.get_config(self.module_id,'memory',default='1024')
 		shutit.get_config(self.module_id,'swapsize',default='2G')
 		return True
 
