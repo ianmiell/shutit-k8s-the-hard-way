@@ -168,6 +168,11 @@ end''')
 			shutit_session = shutit_sessions[machine]
 			shutit_session.multisend('adduser person',{'Enter new UNIX password':'person','Retype new UNIX password:':'person','Full Name':'','Phone':'','Room':'','Other':'','Is the information correct':'Y'})
 
+		# Setup:
+		# POD CIDR hard-coded to 10.200.0.0/16
+		pod_cidr = '10.200.0.0/16'
+		service_cidr = '10.32.0.0/24'
+		# We don't bother with HA just contact first controller's API.
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-client-tools.md
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
@@ -492,7 +497,7 @@ Description=Kubernetes API Server
 Documentation=https://github.com/kubernetes/kubernetes
 
 [Service]
-ExecStart=/usr/local/bin/kube-apiserver --advertise-address=${INTERNAL_IP} --allow-privileged=true --apiserver-count=3 --audit-log-maxage=30 --audit-log-maxbackup=3 --audit-log-maxsize=100 --audit-log-path=/var/log/audit.log --authorization-mode=Node,RBAC --bind-address=0.0.0.0 --client-ca-file=/var/lib/kubernetes/ca.pem --enable-admission-plugins=Initializers,NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota --enable-swagger-ui=true --etcd-cafile=/var/lib/kubernetes/ca.pem --etcd-certfile=/var/lib/kubernetes/kubernetes.pem --etcd-keyfile=/var/lib/kubernetes/kubernetes-key.pem --etcd-servers=https://''' + machines['k8sc1']['ip'] + ''':2379,https://''' + machines['k8sc2']['ip'] + ''':2379,https://''' + machines['k8sc3']['ip'] + ''':2379 --event-ttl=1h --experimental-encryption-provider-config=/var/lib/kubernetes/encryption-config.yaml --kubelet-certificate-authority=/var/lib/kubernetes/ca.pem --kubelet-client-certificate=/var/lib/kubernetes/kubernetes.pem --kubelet-client-key=/var/lib/kubernetes/kubernetes-key.pem --kubelet-https=true --runtime-config=api/all --service-account-key-file=/var/lib/kubernetes/service-account.pem --service-cluster-ip-range=10.32.0.0/24 --service-node-port-range=30000-32767 --tls-cert-file=/var/lib/kubernetes/kubernetes.pem --tls-private-key-file=/var/lib/kubernetes/kubernetes-key.pem --v=2
+ExecStart=/usr/local/bin/kube-apiserver --advertise-address=${INTERNAL_IP} --allow-privileged=true --apiserver-count=3 --audit-log-maxage=30 --audit-log-maxbackup=3 --audit-log-maxsize=100 --audit-log-path=/var/log/audit.log --authorization-mode=Node,RBAC --bind-address=0.0.0.0 --client-ca-file=/var/lib/kubernetes/ca.pem --enable-admission-plugins=Initializers,NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota --enable-swagger-ui=true --etcd-cafile=/var/lib/kubernetes/ca.pem --etcd-certfile=/var/lib/kubernetes/kubernetes.pem --etcd-keyfile=/var/lib/kubernetes/kubernetes-key.pem --etcd-servers=https://''' + machines['k8sc1']['ip'] + ''':2379,https://''' + machines['k8sc2']['ip'] + ''':2379,https://''' + machines['k8sc3']['ip'] + ''':2379 --event-ttl=1h --experimental-encryption-provider-config=/var/lib/kubernetes/encryption-config.yaml --kubelet-certificate-authority=/var/lib/kubernetes/ca.pem --kubelet-client-certificate=/var/lib/kubernetes/kubernetes.pem --kubelet-client-key=/var/lib/kubernetes/kubernetes-key.pem --kubelet-https=true --runtime-config=api/all --service-account-key-file=/var/lib/kubernetes/service-account.pem --service-cluster-ip-range=''' + service_cidr + ''' --service-node-port-range=30000-32767 --tls-cert-file=/var/lib/kubernetes/kubernetes.pem --tls-private-key-file=/var/lib/kubernetes/kubernetes-key.pem --v=2
 Restart=on-failure
 RestartSec=5
 
@@ -508,7 +513,7 @@ Description=Kubernetes Controller Manager
 Documentation=https://github.com/kubernetes/kubernetes
 
 [Service]
-ExecStart=/usr/local/bin/kube-controller-manager --address=0.0.0.0 --cluster-cidr=10.200.0.0/16 --cluster-name=kubernetes --cluster-signing-cert-file=/var/lib/kubernetes/ca.pem --cluster-signing-key-file=/var/lib/kubernetes/ca-key.pem --kubeconfig=/var/lib/kubernetes/kube-controller-manager.kubeconfig --leader-elect=true --root-ca-file=/var/lib/kubernetes/ca.pem --service-account-private-key-file=/var/lib/kubernetes/service-account-key.pem --service-cluster-ip-range=10.32.0.0/24 --use-service-account-credentials=true --v=2
+ExecStart=/usr/local/bin/kube-controller-manager --address=0.0.0.0 --cluster-cidr=10.200.0.0/16 --cluster-name=kubernetes --cluster-signing-cert-file=/var/lib/kubernetes/ca.pem --cluster-signing-key-file=/var/lib/kubernetes/ca-key.pem --kubeconfig=/var/lib/kubernetes/kube-controller-manager.kubeconfig --leader-elect=true --root-ca-file=/var/lib/kubernetes/ca.pem --service-account-private-key-file=/var/lib/kubernetes/service-account-key.pem --service-cluster-ip-range=''' + service_cidr + ''' --use-service-account-credentials=true --v=2
 Restart=on-failure
 RestartSec=5
 
@@ -609,8 +614,6 @@ EOF''')
 
 		# Load balancer skipped - we use k8sc1
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/09-bootstrapping-kubernetes-workers.md
-		# POD CIDR hard-coded to 10.200.0.0/16
-		pod_cidr = '10.200.0.0/16'
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			if machine in ('k8sw1','k8sw2','k8sw3'):
@@ -783,11 +786,12 @@ EOF''')
 			shutit_session.send('apt-get install openvswitch-switch openvswitch-common -y')
 			if machine == 'k8sc1':
 				shutit_session.send('apt-get install ovn-central ovn-common ovn-host -y')
+				shutit_session.send('modprobe vport-geneve')
 				#shutit_session.install('golang-go')
 				shutit_session.multisend('add-apt-repository ppa:gophers/archive',{'to continue':''})
 				shutit_session.send('apt-get update -y')
 				shutit_session.send('apt-get install -y golang-1.10-go')
-				shutit_session.send('PATH=/usr/lib/go-1.10/bin')
+				shutit_session.send('PATH=/usr/lib/go-1.10/bin:${PATH}')
 				shutit_session.send('export GOPATH=$HOME/work')
 				shutit_session.send('mkdir -p $GOPATH/github.com/openvswitch')
 				shutit_session.send('cd $GOPATH/github.com/openvswitch')
@@ -795,10 +799,62 @@ EOF''')
 				shutit_session.send('cd ovn-kubernetes/go-controller')
 				shutit_session.send('make')
 				shutit_session.send('make install')
+				# TODO: copy ovnkube
 			else:
 				shutit_session.send('apt-get install ovn-common ovn-host -y')
-		shutit_session_k8sc1.pause_point('back to here https://github.com/openvswitch/ovn-kubernetes and nohup sudo ovnkube')
+				shutit_session.send('modprobe vport-geneve')
+		shutit_session_k8sc1.send('SERVICE_IP_SUBNET=' + service_cidr)
+		shutit_session_k8sc1.send('CLUSTER_IP_SUBNET=' + pod_cidr)
+		shutit_session_k8sc1.send('CENTRAL_IP='        + external_ip)
+		shutit_session_k8sc1.send('NODE_NAME=k8sc1')
+		shutit_session_k8sc1.send('''TOKEN==$(kubectl describe secret $(kubectl get secrets | grep ^default | awk '{print $1}') | grep ^token | awk '{print $NF}')''')
+		shutit_session_k8sc1.send(r'''nohup ovnkube      \
+			-k8s-kubeconfig /root/.kube/config           \
+			-net-controller                              \
+			-loglevel=4                                  \
+			-k8s-apiserver="http://$CENTRAL_IP:8080"     \
+			-logfile="/var/log/openvswitch/ovnkube.log"  \
+			-init-master=$NODE_NAME                      \
+			-cluster-subnet="$CLUSTER_IP_SUBNET"         \
+			-service-cluster-ip-range=$SERVICE_IP_SUBNET \
+			-nodeport                                    \
+			-init-gateways                               \
+			-gateway-localnet                            \
+			-k8s-token="$TOKEN"                          \
+			-nb-address="tcp://$CENTRAL_IP:6641"         \
+			-sb-address="tcp://$CENTRAL_IP:6642" 2>&1 &''')
 
+		for machine in sorted(machines.keys()):
+			if machine != 'k8sc1':
+				shutit_session_k8sc1.send('scp /usr/bin/ovnkube ' + machine + ':/usr/bin/ovnkube')
+			if machine in ('k8sw1','k8sw2','k8sw3'):
+				# Copy over the admin kubeconfig etc so that ovnkube can be started
+				shutit_session_k8sc1.send('scp admin* ' + machine + ':')
+
+
+		for machine in sorted(machines.keys()):
+			shutit_session = shutit_sessions[machine]
+			if machine in ('k8sw1','k8sw2','k8sw3'):
+#For both the above cases, ovnkube will create a OVS bridge on top of your physical interface and move the IP address and route informations from the physical interface to OVS bridge. If you are using Ubuntu and OVS startup scripts are systemd (e.g: there is a file called /lib/systemd/system/ovsdb-server.service) , you will have to add the following line to /etc/default/openvswitch
+#OPTIONS=--delete-transient-ports
+				shutit_session.send('CENTRAL_IP=' + external_ip)
+				shutit_session.send('NODE_NAME=' + machine)
+				shutit_session.send('CLUSTER_IP_SUBNET=10.200.0.0/16')
+				shutit_session.send('SERVICE_IP_SUBNET=10.32.0.0/24')
+				shutit_session_k8sc1.send('''TOKEN=$(kubectl --kubeconfig admin.kubeconfig describe secret $(kubectl --kubeconfig admin.kubeconfig get secrets | grep ^default | awk '{print $1}') | grep ^token | awk '{print $NF}')''')
+				shutit_session.send(r'''nohup ovnkube            \
+					-k8s-kubeconfig admin.kubeconfig             \
+					-loglevel=4                                  \
+					-logfile="/var/log/openvswitch/ovnkube.log"  \
+					-k8s-apiserver="http://$CENTRAL_IP:8080"     \
+					-init-node="$NODE_NAME"                      \
+					-cluster-subnet=$CLUSTER_IP_SUBNET           \
+					-service-cluster-ip-range=$SERVICE_IP_SUBNET \
+					-nodeport                                    \
+					-init-gateways                               \
+					-k8s-token="$TOKEN"                          \
+					-nb-address="tcp://$CENTRAL_IP:6641"         \
+					-sb-address="tcp://$CENTRAL_IP:6642" 2>&1 &''')
 
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
