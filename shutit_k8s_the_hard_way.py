@@ -862,6 +862,14 @@ EOF''')
 			shutit_session.send('hostname')
 			shutit_session_k8sc1.pause_point('all ok? ovn-sbctl list chassis')
 
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/12-dns-addon.md
+		shutit_session_k8sc1.send('kubectl create -f https://storage.googleapis.com/kubernetes-the-hard-way/kube-dns.yaml')
+		shutit_session_k8sc1.send('kubectl run busybox --image=busybox --command -- sleep 3600')
+		shutit_session_k8sc1.send_until('kubectl get pods -l run=busybox','Running')
+		shutit_session_k8sc1.send('POD_NAME=$(kubectl get pods -l run=busybox -o jsonpath="{.items[0].metadata.name}")')
+		shutit_session_k8sc1.send_until('kubectl exec -ti $POD_NAME -- nslookup kubernetes','kube-dns.kube-system.svc.cluster.local')
+
+		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/13-smoke-test.md
 
 		return True
 
