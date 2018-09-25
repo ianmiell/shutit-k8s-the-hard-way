@@ -830,7 +830,7 @@ EOF''')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				# Copy over the admin kubeconfig etc so that ovnkube can be started
 				shutit_session_k8sc1.send('scp /root/admin* ' + machine + ':')
-				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1/@''' + machines['k8sc1']['ip'] + '''@' admin.kubeconfig''')
+				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' admin.kubeconfig''')
 
 
 		for machine in sorted(machines.keys()):
