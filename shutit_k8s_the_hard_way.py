@@ -830,7 +830,7 @@ EOF''')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				# Copy over the admin kubeconfig etc so that ovnkube can be started
 				shutit_session_k8sc1.send('scp /root/admin* ' + machine + ':')
-				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' admin.kubeconfig''')
+				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' /root/admin.kubeconfig''')
 
 
 		for machine in sorted(machines.keys()):
@@ -838,14 +838,13 @@ EOF''')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 #For both the above cases, ovnkube will create a OVS bridge on top of your physical interface and move the IP address and route informations from the physical interface to OVS bridge. If you are using Ubuntu and OVS startup scripts are systemd (e.g: there is a file called /lib/systemd/system/ovsdb-server.service) , you will have to add the following line to /etc/default/openvswitch
 #OPTIONS=--delete-transient-ports
-				shutit_session.pause_point('manually change server ip?')
 				shutit_session.send('CENTRAL_IP=' + machines['k8sc1']['ip'])
 				shutit_session.send('NODE_NAME=' + machine)
 				shutit_session.send('CLUSTER_IP_SUBNET=10.200.0.0/16')
 				shutit_session.send('SERVICE_IP_SUBNET=10.32.0.0/24')
-				shutit_session_k8sc1.send('''TOKEN=$(kubectl --kubeconfig admin.kubeconfig describe secret $(kubectl --kubeconfig admin.kubeconfig get secrets | grep ^default | awk '{print $1}') | grep ^token | awk '{print $NF}')''')
+				shutit_session_k8sc1.send('''TOKEN=$(kubectl --kubeconfig /root/admin.kubeconfig describe secret $(kubectl --kubeconfig /root/admin.kubeconfig get secrets | grep ^default | awk '{print $1}') | grep ^token | awk '{print $NF}')''')
 				shutit_session.send(r'''nohup ovnkube            \
-					-k8s-kubeconfig admin.kubeconfig             \
+					-k8s-kubeconfig /root/admin.kubeconfig             \
 					-loglevel=4                                  \
 					-logfile="/var/log/openvswitch/ovnkube.log"  \
 					-k8s-apiserver="http://$CENTRAL_IP:8080"     \
@@ -861,6 +860,7 @@ EOF''')
 		for machine in sorted(machines.keys()):
 			shutit_session = shutit_sessions[machine]
 			shutit_session.send('hostname')
+			shutit_session_k8sc1.pause_point('all ok? ovn-sbctl list chassis')
 
 
 		return True
