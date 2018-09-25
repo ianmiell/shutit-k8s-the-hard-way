@@ -786,7 +786,6 @@ EOF''')
 			shutit_session.send('apt-get install openvswitch-switch openvswitch-common -y')
 			if machine == 'k8sc1':
 				shutit_session.send('apt-get install ovn-central ovn-common ovn-host -y')
-				shutit_session.send('modprobe vport-geneve')
 				#shutit_session.install('golang-go')
 				shutit_session.multisend('add-apt-repository ppa:gophers/archive',{'to continue':''})
 				shutit_session.send('apt-get update -y')
@@ -802,7 +801,8 @@ EOF''')
 				# TODO: copy ovnkube
 			else:
 				shutit_session.send('apt-get install ovn-common ovn-host -y')
-				shutit_session.send('modprobe vport-geneve')
+			shutit_session.send('modprobe vport-geneve')
+			shutit_session.send('/usr/share/openvswitch/scripts/ovs-ctl --protocol=udp --dport=6081 enable-protocol')
 		shutit_session_k8sc1.send('SERVICE_IP_SUBNET=' + service_cidr)
 		shutit_session_k8sc1.send('CLUSTER_IP_SUBNET=' + pod_cidr)
 		shutit_session_k8sc1.send('CENTRAL_IP='        + machines['k8sc1']['ip'])
@@ -838,7 +838,7 @@ EOF''')
 #For both the above cases, ovnkube will create a OVS bridge on top of your physical interface and move the IP address and route informations from the physical interface to OVS bridge. If you are using Ubuntu and OVS startup scripts are systemd (e.g: there is a file called /lib/systemd/system/ovsdb-server.service) , you will have to add the following line to /etc/default/openvswitch
 #OPTIONS=--delete-transient-ports
 				# Copy the admin kubeconfig because it gets auto-rewritten for some reason
-				shutit_session.send('cp /root/admin.kubeconfig* /root/admin_copy.kubeonfig')
+				shutit_session.send('cp /root/admin.kubeconfig* /root/admin_copy.kubeconfig')
 				shutit_session.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' /root/admin_copy.kubeconfig''')
 				shutit_session.send('CENTRAL_IP=' + machines['k8sc1']['ip'])
 				shutit_session.send('NODE_NAME=' + machine)
@@ -859,20 +859,16 @@ EOF''')
 					-nb-address="tcp://$CENTRAL_IP:6641"         \
 					-sb-address="tcp://$CENTRAL_IP:6642" 2>&1 &''')
 
-		for machine in sorted(machines.keys()):
-			shutit_session = shutit_sessions[machine]
-			shutit_session.send('hostname')
-			shutit_session_k8sc1.pause_point('all ok? ovn-sbctl list chassis')
-
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/12-dns-addon.md
 		shutit_session_k8sc1.send('kubectl create -f https://storage.googleapis.com/kubernetes-the-hard-way/kube-dns.yaml')
 		shutit_session_k8sc1.send('kubectl run busybox --image=busybox --command -- sleep 3600')
-		shutit_session_k8sc1.send_until('kubectl get pods -l run=busybox','Running')
+		shutit_session_k8sc1.send_until('kubectl get pods -l run=busybox','.*Running.*')
 		shutit_session_k8sc1.send('POD_NAME=$(kubectl get pods -l run=busybox -o jsonpath="{.items[0].metadata.name}")')
-		shutit_session_k8sc1.send_until('kubectl exec -ti $POD_NAME -- nslookup kubernetes','kube-dns.kube-system.svc.cluster.local')
+		shutit_session_k8sc1.send_until('kubectl exec -ti $POD_NAME -- nslookup kubernetes','.*kube-dns.kube-system.svc.cluster.local.*')
 
 		# https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/13-smoke-test.md
 
+		shutit_session_k8sc1.pause_point('all done')
 		return True
 
 
