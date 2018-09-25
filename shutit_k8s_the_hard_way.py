@@ -805,7 +805,7 @@ EOF''')
 				shutit_session.send('modprobe vport-geneve')
 		shutit_session_k8sc1.send('SERVICE_IP_SUBNET=' + service_cidr)
 		shutit_session_k8sc1.send('CLUSTER_IP_SUBNET=' + pod_cidr)
-		shutit_session_k8sc1.send('CENTRAL_IP='        + external_ip)
+		shutit_session_k8sc1.send('CENTRAL_IP='        + machines['k8sc1']['ip'])
 		shutit_session_k8sc1.send('NODE_NAME=k8sc1')
 		shutit_session_k8sc1.send('''TOKEN==$(kubectl describe secret $(kubectl get secrets | grep ^default | awk '{print $1}') | grep ^token | awk '{print $NF}')''')
 		shutit_session_k8sc1.send(r'''nohup ovnkube      \
@@ -830,6 +830,8 @@ EOF''')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				# Copy over the admin kubeconfig etc so that ovnkube can be started
 				shutit_session_k8sc1.send('scp admin* ' + machine + ':')
+				shutit_session_k8sc1.send(r'''sed -i 's@\(.*server: \)/@\1https://''' + machines['k8sc1']['ip'] + ''':6443@ admin.kubeconfig''')
+
 
 
 		for machine in sorted(machines.keys()):
@@ -837,7 +839,8 @@ EOF''')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 #For both the above cases, ovnkube will create a OVS bridge on top of your physical interface and move the IP address and route informations from the physical interface to OVS bridge. If you are using Ubuntu and OVS startup scripts are systemd (e.g: there is a file called /lib/systemd/system/ovsdb-server.service) , you will have to add the following line to /etc/default/openvswitch
 #OPTIONS=--delete-transient-ports
-				shutit_session.send('CENTRAL_IP=' + external_ip)
+				shutit_session.pause_point('manually change server ip?')
+				shutit_session.send('CENTRAL_IP=' + machines['k8sc1']['ip'])
 				shutit_session.send('NODE_NAME=' + machine)
 				shutit_session.send('CLUSTER_IP_SUBNET=10.200.0.0/16')
 				shutit_session.send('SERVICE_IP_SUBNET=10.32.0.0/24')
