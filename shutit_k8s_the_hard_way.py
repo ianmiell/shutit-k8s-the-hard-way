@@ -839,12 +839,12 @@ EOF''')
 #OPTIONS=--delete-transient-ports
 				# Copy the admin kubeconfig because it gets auto-rewritten for some reason
 				shutit_session.send('cp /root/admin.kubeconfig* /root/admin_copy.kubeonfig')
-				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' /root/admin_copy.kubeconfig''')
+				shutit_session.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' /root/admin_copy.kubeconfig''')
 				shutit_session.send('CENTRAL_IP=' + machines['k8sc1']['ip'])
 				shutit_session.send('NODE_NAME=' + machine)
 				shutit_session.send('CLUSTER_IP_SUBNET=10.200.0.0/16')
 				shutit_session.send('SERVICE_IP_SUBNET=10.32.0.0/24')
-				shutit_session_k8sc1.send('''TOKEN=$(kubectl --kubeconfig /root/admin_copy.kubeconfig describe secret $(kubectl --kubeconfig /root/admin_copy.kubeconfig get secrets | grep ^default | awk '{print $1}') | grep ^token | awk '{print $NF}')''')
+				shutit_session.send('''TOKEN=$(kubectl --kubeconfig /root/admin_copy.kubeconfig describe secret $(kubectl --kubeconfig /root/admin_copy.kubeconfig get secrets | grep ^default | awk '{print $1}') | grep ^token | awk '{print $NF}')''')
 				shutit_session.send(r'''nohup ovnkube            \
 					-k8s-kubeconfig /root/admin_copy.kubeconfig  \
 					-loglevel=4                                  \
