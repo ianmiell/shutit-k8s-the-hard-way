@@ -830,7 +830,6 @@ EOF''')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				# Copy over the admin kubeconfig etc so that ovnkube can be started
 				shutit_session_k8sc1.send('scp /root/admin* ' + machine + ':')
-				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' /root/admin.kubeconfig''')
 
 
 		for machine in sorted(machines.keys()):
@@ -840,6 +839,7 @@ EOF''')
 #OPTIONS=--delete-transient-ports
 				# Copy the admin kubeconfig because it gets auto-rewritten for some reason
 				shutit_session.send('cp /root/admin.kubeconfig* /root/admin_copy.kubeonfig')
+				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1@''' + machines['k8sc1']['ip'] + '''@' /root/admin_copy.kubeconfig''')
 				shutit_session.send('CENTRAL_IP=' + machines['k8sc1']['ip'])
 				shutit_session.send('NODE_NAME=' + machine)
 				shutit_session.send('CLUSTER_IP_SUBNET=10.200.0.0/16')
