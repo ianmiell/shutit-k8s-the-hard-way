@@ -420,7 +420,7 @@ EOF''')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				shutit_session_k8sc1.multisend('scp ' + machine + '.kubeconfig kube-proxy.kubeconfig ' + machine + ':~/',{'onnecting':'yes'})
 			if machine in ('k8sc1','k8sc2','k8sc3'):
-				shutit_session_k8sc1.multisend('scp admin.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ' + machine + ':~/',{'onnecting':'yes'})
+				shutit_session_k8sc1.multisend('scp /root/admin.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ' + machine + ':~/',{'onnecting':'yes'})
 
 		# https://github.com/ianmiell/kubernetes-the-hard-way/blob/master/docs/06-data-encryption-keys.md
 		shutit_session_k8sc1.send('ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)')
@@ -829,9 +829,8 @@ EOF''')
 				shutit_session_k8sc1.send('scp /usr/bin/ovnkube ' + machine + ':/usr/bin/ovnkube')
 			if machine in ('k8sw1','k8sw2','k8sw3'):
 				# Copy over the admin kubeconfig etc so that ovnkube can be started
-				shutit_session_k8sc1.send('scp admin* ' + machine + ':')
-				shutit_session_k8sc1.send(r'''sed -i 's@\(.*server: \)/@\1https://''' + machines['k8sc1']['ip'] + ''':6443@ admin.kubeconfig''')
-
+				shutit_session_k8sc1.send('scp /root/admin* ' + machine + ':')
+				shutit_session_k8sc1.send(r'''sed -i 's@127.0.0.1/@''' + machines['k8sc1']['ip'] + '''@' admin.kubeconfig''')
 
 
 		for machine in sorted(machines.keys()):
