@@ -1,6 +1,6 @@
 
 
-## Install
+## Install
 
 - virtualbox
 - vagrant
